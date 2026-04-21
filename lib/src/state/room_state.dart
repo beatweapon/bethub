@@ -2,14 +2,14 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
-import '../data/mock_room_repository.dart';
+import '../data/room_repository.dart';
 import '../models/room_member.dart';
 import '../models/room_session.dart';
 
 class RoomState extends ChangeNotifier {
-  RoomState({required MockRoomRepository repository}) : _repository = repository;
+  RoomState({required RoomRepository repository}) : _repository = repository;
 
-  final MockRoomRepository _repository;
+  final RoomRepository _repository;
 
   RoomSession? _session;
   bool _isJoining = false;
@@ -141,6 +141,7 @@ class RoomState extends ChangeNotifier {
   @override
   void dispose() {
     _roomSubscription?.cancel();
+    _repository.dispose();
     super.dispose();
   }
 }

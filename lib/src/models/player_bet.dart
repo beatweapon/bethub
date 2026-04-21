@@ -20,4 +20,16 @@ class PlayerBet {
       amount: amount ?? this.amount,
     );
   }
+
+  factory PlayerBet.fromJson(Map<String, dynamic> json) {
+    return PlayerBet(
+      memberId: json['memberId'] as String,
+      targetId: json['targetId'] as String,
+      amount: json['amount'] as int,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {'memberId': memberId, 'targetId': targetId, 'amount': amount};
+  }
 }

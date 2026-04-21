@@ -1,14 +1,16 @@
 import 'dart:async';
 
+import 'room_repository.dart';
 import '../models/bet_target.dart';
 import '../models/player_bet.dart';
 import '../models/room_member.dart';
 import '../models/room_session.dart';
 
-class MockRoomRepository {
+class MockRoomRepository implements RoomRepository {
   RoomSession? _session;
   StreamController<RoomSession>? _controller;
 
+  @override
   Future<RoomSession> joinRoom({required String userName}) async {
     await Future<void>.delayed(const Duration(milliseconds: 300));
 
@@ -17,15 +19,30 @@ class MockRoomRepository {
       roomName: 'Mock Room',
       members: [
         RoomMember(id: 'self', name: userName, coins: 500, isCurrentUser: true),
-        const RoomMember(id: 'member-1', name: 'Saki', coins: 720),
-        const RoomMember(id: 'member-2', name: 'Taro', coins: 430),
-        const RoomMember(id: 'member-3', name: 'Mina', coins: 910),
+        const RoomMember(id: 'member-1', name: 'Mock Saki', coins: 720),
+        const RoomMember(id: 'member-2', name: 'Mock Taro', coins: 430),
+        const RoomMember(id: 'member-3', name: 'Mock Mina', coins: 910),
       ],
       betTargets: const [
-        BetTarget(id: 'target-1', name: 'Red Phoenix', winRate: 0.42, odds: 2.1),
+        BetTarget(
+          id: 'target-1',
+          name: 'Red Phoenix',
+          winRate: 0.42,
+          odds: 2.1,
+        ),
         BetTarget(id: 'target-2', name: 'Blue Nova', winRate: 0.28, odds: 3.8),
-        BetTarget(id: 'target-3', name: 'Golden Tide', winRate: 0.18, odds: 5.2),
-        BetTarget(id: 'target-4', name: 'Silver Fang', winRate: 0.12, odds: 7.4),
+        BetTarget(
+          id: 'target-3',
+          name: 'Golden Tide',
+          winRate: 0.18,
+          odds: 5.2,
+        ),
+        BetTarget(
+          id: 'target-4',
+          name: 'Silver Fang',
+          winRate: 0.12,
+          odds: 7.4,
+        ),
       ],
       bets: const [
         PlayerBet(memberId: 'member-1', targetId: 'target-1', amount: 120),
@@ -42,6 +59,7 @@ class MockRoomRepository {
     return session;
   }
 
+  @override
   Stream<RoomSession> watchRoom(String roomId) {
     final controller = _controller;
     final session = _session;
@@ -52,6 +70,7 @@ class MockRoomRepository {
     return controller.stream;
   }
 
+  @override
   Future<RoomSession> submitBet({
     required String roomId,
     required String memberId,
@@ -83,5 +102,10 @@ class MockRoomRepository {
     _session = nextSession;
     controller.add(nextSession);
     return nextSession;
+  }
+
+  @override
+  Future<void> dispose() async {
+    await _controller?.close();
   }
 }

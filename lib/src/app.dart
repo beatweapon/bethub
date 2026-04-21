@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
-import 'data/mock_room_repository.dart';
+import 'data/room_repository.dart';
+import 'data/web_socket_room_repository.dart';
 import 'screens/entry_page.dart';
 import 'state/room_scope.dart';
 import 'state/room_state.dart';
@@ -18,7 +19,15 @@ class _BetHubAppState extends State<BetHubApp> {
   @override
   void initState() {
     super.initState();
-    _roomState = RoomState(repository: MockRoomRepository());
+    _roomState = RoomState(repository: _buildRepository());
+  }
+
+  RoomRepository _buildRepository() {
+    const roomServerUrl = String.fromEnvironment(
+      'ROOM_SERVER_URL',
+      defaultValue: 'ws://localhost:8080',
+    );
+    return WebSocketRoomRepository(serverUrl: roomServerUrl);
   }
 
   @override
