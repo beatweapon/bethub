@@ -32,4 +32,30 @@ class RoomSession {
       bets: bets ?? this.bets,
     );
   }
+
+  factory RoomSession.fromJson(Map<String, dynamic> json) {
+    return RoomSession(
+      roomId: json['roomId'] as String,
+      roomName: json['roomName'] as String,
+      members: (json['members'] as List<dynamic>)
+          .map((member) => RoomMember.fromJson(member as Map<String, dynamic>))
+          .toList(),
+      betTargets: (json['betTargets'] as List<dynamic>)
+          .map((target) => BetTarget.fromJson(target as Map<String, dynamic>))
+          .toList(),
+      bets: (json['bets'] as List<dynamic>)
+          .map((bet) => PlayerBet.fromJson(bet as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'roomId': roomId,
+      'roomName': roomName,
+      'members': members.map((member) => member.toJson()).toList(),
+      'betTargets': betTargets.map((target) => target.toJson()).toList(),
+      'bets': bets.map((bet) => bet.toJson()).toList(),
+    };
+  }
 }

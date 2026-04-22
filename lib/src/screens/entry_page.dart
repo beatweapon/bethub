@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../data/room_repository.dart';
 import '../state/room_scope.dart';
 import 'bet_page.dart';
 
@@ -26,7 +27,18 @@ class _EntryPageState extends State<EntryPage> {
     }
 
     final roomState = RoomScope.of(context);
-    await roomState.joinRoom(_nameController.text.trim());
+    try {
+      await roomState.joinRoom(_nameController.text.trim());
+    } on RoomJoinException catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
+      return;
+    }
 
     if (!mounted || roomState.session == null) {
       return;
