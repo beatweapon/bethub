@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../data/room_repository.dart';
 import '../state/room_scope.dart';
 import 'bet_page.dart';
+import 'room_master_page.dart';
 
 class EntryPage extends StatefulWidget {
   const EntryPage({super.key});
@@ -26,9 +27,12 @@ class _EntryPageState extends State<EntryPage> {
       return;
     }
 
+    final userName = _nameController.text.trim();
+    final isRoomMaster = userName == '管理者';
+
     final roomState = RoomScope.of(context);
     try {
-      await roomState.joinRoom(_nameController.text.trim());
+      await roomState.joinRoom(userName);
     } on RoomJoinException catch (error) {
       if (!mounted) {
         return;
@@ -44,9 +48,12 @@ class _EntryPageState extends State<EntryPage> {
       return;
     }
 
+    final destinationPage = isRoomMaster
+        ? const RoomMasterPage()
+        : const BetPage();
     await Navigator.of(
       context,
-    ).push(MaterialPageRoute<void>(builder: (_) => const BetPage()));
+    ).push(MaterialPageRoute<void>(builder: (_) => destinationPage));
   }
 
   @override

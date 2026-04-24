@@ -3,12 +3,12 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 
-import '../models/room_member.dart';
+import '../models/race_status.dart';
 import '../models/room_session.dart';
 import 'room_repository.dart';
 
-// プラットフォーム固有のインポート
-import 'dart:io' as io show WebSocket, WebSocketException;
+// Platform specific imports
+import 'dart:io' as io show WebSocket;
 import 'dart:html' as html show WebSocket;
 
 /// WebSocketチャネルの統一インターフェース
@@ -73,8 +73,12 @@ class WebSocketRoomRepository implements RoomRepository {
   Future<void>? _connectFuture;
   RoomSession? _session;
   String? _memberId;
+  bool _isRoomMaster = false;
   Completer<RoomSession>? _joinCompleter;
   Completer<RoomSession>? _submitBetCompleter;
+  Completer<RoomSession>? _updateRaceStatusCompleter;
+  Completer<RoomSession>? _addBetTargetCompleter;
+  Completer<RoomSession>? _submitRaceResultsCompleter;
 
   @override
   Future<RoomSession> joinRoom({required String userName}) async {
@@ -153,6 +157,10 @@ class WebSocketRoomRepository implements RoomRepository {
   }
 
   Future<void> _ensureConnected() async {
+    if (_channel != null) {
+      return;
+    }
+
     final pending = _connectFuture;
     if (pending != null) {
       return pending;
@@ -250,7 +258,8 @@ class WebSocketRoomRepository implements RoomRepository {
 
     switch (type) {
       case 'join_room_success':
-        _memberId = payload['memberId'] as String;
+        _memberId = payload['memberId'] as String?;
+        _isRoomMaster = payload['isRoomMaster'] as bool? ?? false;
         break;
       case 'room_snapshot':
         final session = _parseSession(payload);
@@ -260,7 +269,8 @@ class WebSocketRoomRepository implements RoomRepository {
         final joinCompleter = _joinCompleter;
         if (joinCompleter != null &&
             !joinCompleter.isCompleted &&
-            session.members.any((member) => member.isCurrentUser)) {
+            (_isRoomMaster ||
+                session.members.any((member) => member.isCurrentUser))) {
           joinCompleter.complete(session);
           _joinCompleter = null;
         }
@@ -269,6 +279,27 @@ class WebSocketRoomRepository implements RoomRepository {
         if (submitBetCompleter != null && !submitBetCompleter.isCompleted) {
           submitBetCompleter.complete(session);
           _submitBetCompleter = null;
+        }
+
+        final updateRaceStatusCompleter = _updateRaceStatusCompleter;
+        if (updateRaceStatusCompleter != null &&
+            !updateRaceStatusCompleter.isCompleted) {
+          updateRaceStatusCompleter.complete(session);
+          _updateRaceStatusCompleter = null;
+        }
+
+        final addBetTargetCompleter = _addBetTargetCompleter;
+        if (addBetTargetCompleter != null &&
+            !addBetTargetCompleter.isCompleted) {
+          addBetTargetCompleter.complete(session);
+          _addBetTargetCompleter = null;
+        }
+
+        final submitRaceResultsCompleter = _submitRaceResultsCompleter;
+        if (submitRaceResultsCompleter != null &&
+            !submitRaceResultsCompleter.isCompleted) {
+          submitRaceResultsCompleter.complete(session);
+          _submitRaceResultsCompleter = null;
         }
         break;
       case 'error':
@@ -286,6 +317,27 @@ class WebSocketRoomRepository implements RoomRepository {
           submitBetCompleter.completeError(StateError(message));
           _submitBetCompleter = null;
         }
+
+        final updateRaceStatusCompleter = _updateRaceStatusCompleter;
+        if (updateRaceStatusCompleter != null &&
+            !updateRaceStatusCompleter.isCompleted) {
+          updateRaceStatusCompleter.completeError(StateError(message));
+          _updateRaceStatusCompleter = null;
+        }
+
+        final addBetTargetCompleter = _addBetTargetCompleter;
+        if (addBetTargetCompleter != null &&
+            !addBetTargetCompleter.isCompleted) {
+          addBetTargetCompleter.completeError(StateError(message));
+          _addBetTargetCompleter = null;
+        }
+
+        final submitRaceResultsCompleter = _submitRaceResultsCompleter;
+        if (submitRaceResultsCompleter != null &&
+            !submitRaceResultsCompleter.isCompleted) {
+          submitRaceResultsCompleter.completeError(StateError(message));
+          _submitRaceResultsCompleter = null;
+        }
         break;
     }
   }
@@ -299,12 +351,8 @@ class WebSocketRoomRepository implements RoomRepository {
 
     final nextMembers = session.members
         .map(
-          (member) => RoomMember(
-            id: member.id,
-            name: member.name,
-            coins: member.coins,
-            isCurrentUser: member.id == currentMemberId,
-          ),
+          (member) =>
+              member.copyWith(isCurrentUser: member.id == currentMemberId),
         )
         .toList();
 
@@ -324,6 +372,30 @@ class WebSocketRoomRepository implements RoomRepository {
       submitBetCompleter.completeError(StateError('ベット更新の受信に失敗しました: $error'));
       _submitBetCompleter = null;
     }
+
+    final updateRaceStatusCompleter = _updateRaceStatusCompleter;
+    if (updateRaceStatusCompleter != null &&
+        !updateRaceStatusCompleter.isCompleted) {
+      updateRaceStatusCompleter.completeError(
+        StateError('レースステータス更新に失敗しました: $error'),
+      );
+      _updateRaceStatusCompleter = null;
+    }
+
+    final addBetTargetCompleter = _addBetTargetCompleter;
+    if (addBetTargetCompleter != null && !addBetTargetCompleter.isCompleted) {
+      addBetTargetCompleter.completeError(StateError('ベット対象追加に失敗しました: $error'));
+      _addBetTargetCompleter = null;
+    }
+
+    final submitRaceResultsCompleter = _submitRaceResultsCompleter;
+    if (submitRaceResultsCompleter != null &&
+        !submitRaceResultsCompleter.isCompleted) {
+      submitRaceResultsCompleter.completeError(
+        StateError('レース結果提出に失敗しました: $error'),
+      );
+      _submitRaceResultsCompleter = null;
+    }
   }
 
   void _sendMessage(String type, Map<String, dynamic> payload) {
@@ -334,6 +406,79 @@ class WebSocketRoomRepository implements RoomRepository {
 
     final message = jsonEncode({'type': type, 'payload': payload});
     channel.send(message);
+  }
+
+  @override
+  Future<RoomSession> updateRaceStatus({
+    required String roomId,
+    required RaceStatus status,
+  }) async {
+    await _ensureConnected();
+
+    final completer = Completer<RoomSession>();
+    _updateRaceStatusCompleter = completer;
+    _sendMessage('update_race_status', {
+      'roomId': roomId,
+      'status': status.toString(),
+    });
+
+    return completer.future.timeout(
+      const Duration(seconds: 5),
+      onTimeout: () {
+        _updateRaceStatusCompleter = null;
+        throw StateError('Timed out while waiting for race status update.');
+      },
+    );
+  }
+
+  @override
+  Future<RoomSession> addBetTarget({
+    required String roomId,
+    required String targetName,
+    required double odds,
+  }) async {
+    await _ensureConnected();
+
+    final completer = Completer<RoomSession>();
+    _addBetTargetCompleter = completer;
+    _sendMessage('add_bet_target', {
+      'roomId': roomId,
+      'targetName': targetName,
+      'odds': odds,
+    });
+
+    return completer.future.timeout(
+      const Duration(seconds: 5),
+      onTimeout: () {
+        _addBetTargetCompleter = null;
+        throw StateError('Timed out while waiting for bet target creation.');
+      },
+    );
+  }
+
+  @override
+  Future<RoomSession> submitRaceResults({
+    required String roomId,
+    required List<String> memberIds,
+  }) async {
+    await _ensureConnected();
+
+    final completer = Completer<RoomSession>();
+    _submitRaceResultsCompleter = completer;
+    _sendMessage('submit_race_results', {
+      'roomId': roomId,
+      'memberIds': memberIds,
+    });
+
+    return completer.future.timeout(
+      const Duration(seconds: 5),
+      onTimeout: () {
+        _submitRaceResultsCompleter = null;
+        throw StateError(
+          'Timed out while waiting for race results submission.',
+        );
+      },
+    );
   }
 
   @override
