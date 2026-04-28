@@ -120,11 +120,7 @@ class _BetPageState extends State<BetPage> {
     final currentUser = roomState.currentUser;
 
     if (session == null || currentUser == null) {
-      return const Scaffold(
-        body: Center(
-          child: Text('部屋情報が見つかりませんでした。'),
-        ),
-      );
+      return const Scaffold(body: Center(child: Text('部屋情報が見つかりませんでした。')));
     }
 
     final totalBetCoins = roomState.totalBetCoinsFor(currentUser.id);
@@ -206,10 +202,7 @@ class _BetPageState extends State<BetPage> {
                 ),
               ),
               const SizedBox(height: 16),
-              Text(
-                '賭け対象一覧',
-                style: Theme.of(context).textTheme.headlineSmall,
-              ),
+              Text('賭け対象一覧', style: Theme.of(context).textTheme.headlineSmall),
               const SizedBox(height: 8),
               Text(
                 '入力値はフォーカスが外れたときに確定します。各対象のカード内で、その対象に誰がいくら賭けているかを確認できます。',
@@ -318,9 +311,7 @@ class _BetTargetCard extends StatelessWidget {
 
     return Card(
       elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -339,10 +330,7 @@ class _BetTargetCard extends StatelessWidget {
                 const SizedBox(width: 12),
                 Expanded(
                   flex: 2,
-                  child: _MetricColumn(
-                    label: '勝率',
-                    value: '$winRatePercent%',
-                  ),
+                  child: _MetricColumn(label: '勝率', value: '$winRatePercent%'),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -359,9 +347,7 @@ class _BetTargetCard extends StatelessWidget {
                     controller: controller,
                     focusNode: focusNode,
                     keyboardType: TextInputType.number,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.digitsOnly,
-                    ],
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                     enabled: !isSubmitting && !isRacing,
                     onSubmitted: (_) => onSubmitted(),
                     decoration: const InputDecoration(
@@ -376,10 +362,7 @@ class _BetTargetCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 20),
-            Text(
-              'この対象へのベット状況',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
+            Text('この対象へのベット状況', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 10),
             if (playerBetStatuses.isEmpty)
               Text(
@@ -425,10 +408,7 @@ class _TargetPlayerBetRow extends StatelessWidget {
                 ),
                 if (status.isCurrentUser) ...[
                   const SizedBox(width: 8),
-                  Text(
-                    'あなた',
-                    style: Theme.of(context).textTheme.labelMedium,
-                  ),
+                  Text('あなた', style: Theme.of(context).textTheme.labelMedium),
                 ],
               ],
             ),
@@ -450,10 +430,7 @@ class _TargetPlayerBetRow extends StatelessWidget {
 }
 
 class _MetricColumn extends StatelessWidget {
-  const _MetricColumn({
-    required this.label,
-    required this.value,
-  });
+  const _MetricColumn({required this.label, required this.value});
 
   final String label;
   final String value;
@@ -464,15 +441,9 @@ class _MetricColumn extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
-          label,
-          style: Theme.of(context).textTheme.bodySmall,
-        ),
+        Text(label, style: Theme.of(context).textTheme.bodySmall),
         const SizedBox(height: 2),
-        Text(
-          value,
-          style: Theme.of(context).textTheme.bodyMedium,
-        ),
+        Text(value, style: Theme.of(context).textTheme.bodyMedium),
       ],
     );
   }

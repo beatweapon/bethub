@@ -9,11 +9,7 @@ class PlayerBet {
   final String targetId;
   final int amount;
 
-  PlayerBet copyWith({
-    String? memberId,
-    String? targetId,
-    int? amount,
-  }) {
+  PlayerBet copyWith({String? memberId, String? targetId, int? amount}) {
     return PlayerBet(
       memberId: memberId ?? this.memberId,
       targetId: targetId ?? this.targetId,

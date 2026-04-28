@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../models/race_status.dart';
-import '../models/room_member.dart';
 import '../state/room_scope.dart';
 
 class RoomMasterPage extends StatefulWidget {
