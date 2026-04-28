@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../models/bet_target.dart';
 import '../models/room_member.dart';
+import '../models/room_session.dart';
 import '../state/room_scope.dart';
 import '../state/room_state.dart';
 import 'room_page.dart';
@@ -19,6 +20,8 @@ class BetPage extends StatefulWidget {
 class _BetPageState extends State<BetPage> {
   final Map<String, TextEditingController> _controllers = {};
   final Map<String, FocusNode> _focusNodes = {};
+  RoomSession? _previousSession;
+  bool _isShowingPayoutDialog = false;
 
   @override
   void didChangeDependencies() {
@@ -33,6 +36,11 @@ class _BetPageState extends State<BetPage> {
     if (session == null || currentUser == null) {
       return;
     }
+
+    _handlePayoutTransition(
+      nextSession: session,
+      currentUserId: currentUser.id,
+    );
 
     for (final target in session.betTargets) {
       _controllers.putIfAbsent(
@@ -56,6 +64,8 @@ class _BetPageState extends State<BetPage> {
         return node;
       });
     }
+
+    _previousSession = session;
   }
 
   @override
@@ -163,8 +173,8 @@ class _BetPageState extends State<BetPage> {
                 children: [
                   Text('所持コイン', style: Theme.of(context).textTheme.labelSmall),
                   const SizedBox(width: 8),
-                  Text(
-                    '$remainingCoins枚',
+                  _AnimatedCoinCounter(
+                    value: remainingCoins,
                     style: Theme.of(context).textTheme.titleSmall,
                   ),
                 ],
@@ -267,6 +277,229 @@ class _BetPageState extends State<BetPage> {
     });
 
     return statuses;
+  }
+
+  void _handlePayoutTransition({
+    required RoomSession nextSession,
+    required String currentUserId,
+  }) {
+    final previousSession = _previousSession;
+    if (previousSession == null || _isShowingPayoutDialog) {
+      return;
+    }
+
+    RoomMember? previousMember;
+    for (final member in previousSession.members) {
+      if (member.id == currentUserId) {
+        previousMember = member;
+        break;
+      }
+    }
+    RoomMember? nextMember;
+    for (final member in nextSession.members) {
+      if (member.id == currentUserId) {
+        nextMember = member;
+        break;
+      }
+    }
+    if (previousMember == null || nextMember == null) {
+      return;
+    }
+    final previousCoins = previousMember.coins;
+    final nextCoins = nextMember.coins;
+
+    final previousBetTotal = _totalBetForMember(previousSession, currentUserId);
+    final nextBetTotal = _totalBetForMember(nextSession, currentUserId);
+    final isPayoutSettled =
+        previousBetTotal > 0 &&
+        nextBetTotal == 0 &&
+        nextSession.results.isNotEmpty;
+    if (!isPayoutSettled) {
+      return;
+    }
+
+    final coinDelta = nextCoins - previousCoins;
+    _isShowingPayoutDialog = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) {
+        _isShowingPayoutDialog = false;
+        return;
+      }
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: true,
+        builder: (dialogContext) => _PayoutResultDialog(
+          isWin: coinDelta > 0,
+          previousCoins: previousCoins,
+          nextCoins: nextCoins,
+          gainedCoins: math.max(0, coinDelta),
+        ),
+      );
+      _isShowingPayoutDialog = false;
+    });
+  }
+
+  int _totalBetForMember(RoomSession session, String memberId) {
+    var total = 0;
+    for (final bet in session.bets) {
+      if (bet.memberId == memberId) {
+        total += bet.amount;
+      }
+    }
+    return total;
+  }
+}
+
+class _AnimatedCoinCounter extends StatefulWidget {
+  const _AnimatedCoinCounter({required this.value, this.style});
+
+  final int value;
+  final TextStyle? style;
+
+  @override
+  State<_AnimatedCoinCounter> createState() => _AnimatedCoinCounterState();
+}
+
+class _AnimatedCoinCounterState extends State<_AnimatedCoinCounter> {
+  late int _previousValue;
+
+  @override
+  void initState() {
+    super.initState();
+    _previousValue = widget.value;
+  }
+
+  @override
+  void didUpdateWidget(_AnimatedCoinCounter oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.value != widget.value) {
+      _previousValue = oldWidget.value;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween<double>(
+        begin: _previousValue.toDouble(),
+        end: widget.value.toDouble(),
+      ),
+      duration: const Duration(milliseconds: 850),
+      curve: Curves.easeOutCubic,
+      builder: (context, animatedValue, _) {
+        return Text(
+          '${animatedValue.round()}枚',
+          style: widget.style,
+        );
+      },
+    );
+  }
+}
+
+class _PayoutResultDialog extends StatelessWidget {
+  const _PayoutResultDialog({
+    required this.isWin,
+    required this.previousCoins,
+    required this.nextCoins,
+    required this.gainedCoins,
+  });
+
+  final bool isWin;
+  final int previousCoins;
+  final int nextCoins;
+  final int gainedCoins;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final headline = isWin ? 'JACKPOT!' : 'ざんねん...';
+    final message = isWin
+        ? '予想的中！コイン獲得！'
+        : '今回は当たりなし。次のレースで巻き返そう。';
+    final surfaceColor = isWin
+        ? colorScheme.primaryContainer
+        : colorScheme.surfaceContainerHighest;
+
+    return Dialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(24),
+          gradient: isWin
+              ? const LinearGradient(
+                  colors: [Color(0xFFFFF59D), Color(0xFFFFCC80)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                )
+              : const LinearGradient(
+                  colors: [Color(0xFFE0E0E0), Color(0xFFBDBDBD)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(headline, style: Theme.of(context).textTheme.headlineSmall),
+              const SizedBox(height: 8),
+              Text(message, style: Theme.of(context).textTheme.bodyLarge),
+              const SizedBox(height: 16),
+              if (isWin)
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 12,
+                  children: const [Text('🪙'), Text('✨'), Text('🪙'), Text('🎉')],
+                )
+              else
+                const Text('💨'),
+              const SizedBox(height: 16),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: surfaceColor.withOpacity(0.85),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Column(
+                  children: [
+                    Text(
+                      isWin ? '+$gainedCoins枚' : '+0枚',
+                      style: Theme.of(context).textTheme.headlineMedium
+                          ?.copyWith(fontWeight: FontWeight.w800),
+                    ),
+                    const SizedBox(height: 8),
+                    TweenAnimationBuilder<double>(
+                      tween: Tween<double>(
+                        begin: previousCoins.toDouble(),
+                        end: nextCoins.toDouble(),
+                      ),
+                      duration: const Duration(milliseconds: 1300),
+                      curve: Curves.easeOutCubic,
+                      builder: (context, animatedValue, _) {
+                        return Text(
+                          '所持コイン ${animatedValue.round()}枚',
+                          style: Theme.of(context).textTheme.titleLarge,
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('閉じる'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 
