@@ -355,6 +355,10 @@ function buildSnapshotBetTargets(room) {
     ...target,
     odds: Math.max(1, odds[index] || 1),
     winRate: winRates[index] || 0,
+    averageRank:
+      target.ranks.length > 0
+        ? target.ranks.reduce((a, b) => a + b, 0) / target.ranks.length
+        : null,
   }));
 }
 
