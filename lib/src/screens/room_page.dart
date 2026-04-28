@@ -25,7 +25,7 @@ class RoomPage extends StatelessWidget {
       });
 
     return Scaffold(
-      appBar: AppBar(title: const Text('結果画面')),
+      appBar: AppBar(title: const Text('所持コインランキング')),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
