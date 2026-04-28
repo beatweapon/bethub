@@ -134,6 +134,7 @@ class _BetPageState extends State<BetPage> {
       appBar: AppBar(
         title: const Text('ベット画面'),
         centerTitle: true,
+        automaticallyImplyLeading: false,
         actions: [
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -141,10 +142,7 @@ class _BetPageState extends State<BetPage> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    '所持コイン',
-                    style: Theme.of(context).textTheme.labelSmall,
-                  ),
+                  Text('所持コイン', style: Theme.of(context).textTheme.labelSmall),
                   const SizedBox(width: 8),
                   Text(
                     '$remainingCoins枚',
