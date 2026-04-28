@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../models/race_status.dart';
 import '../state/room_scope.dart';
@@ -325,6 +326,10 @@ class _RoomMasterPageState extends State<RoomMasterPage> {
                       ),
                     ),
                     keyboardType: TextInputType.number,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(2),
+                    ],
                     onChanged: (value) {
                       _betTargetRankings[target.id] = int.tryParse(value) ?? 0;
                     },
