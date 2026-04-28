@@ -63,6 +63,28 @@ class _BetPageState extends State<BetPage> {
         });
         return node;
       });
+
+      final controller = _controllers[target.id];
+      final focusNode = _focusNodes[target.id];
+      if (controller == null || focusNode == null) {
+        continue;
+      }
+
+      // サーバー状態を入力欄に同期（結果確定後のベットリセットを反映）
+      // 編集中のフィールドは上書きしない。
+      if (!focusNode.hasFocus) {
+        final syncedAmount = roomState.betAmountFor(
+          memberId: currentUser.id,
+          targetId: target.id,
+        );
+        final syncedText = _displayText(syncedAmount);
+        if (controller.text != syncedText) {
+          controller.value = TextEditingValue(
+            text: syncedText,
+            selection: TextSelection.collapsed(offset: syncedText.length),
+          );
+        }
+      }
     }
 
     _previousSession = session;
