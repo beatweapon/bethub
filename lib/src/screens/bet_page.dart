@@ -131,81 +131,37 @@ class _BetPageState extends State<BetPage> {
     final remainingCoins = currentUser.coins - totalBetCoins;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('ベット画面')),
+      appBar: AppBar(
+        title: const Text('ベット画面'),
+        centerTitle: true,
+        actions: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Center(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '所持コイン',
+                    style: Theme.of(context).textTheme.labelSmall,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '$remainingCoins枚',
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Card(
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '${currentUser.name}の所持コイン',
-                              style: Theme.of(context).textTheme.titleMedium,
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              '${currentUser.coins}枚',
-                              style: Theme.of(context).textTheme.headlineSmall,
-                            ),
-                          ],
-                        ),
-                      ),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Text(
-                            '入力済みベット',
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            '$totalBetCoins枚',
-                            style: Theme.of(context).textTheme.titleLarge,
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Card(
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          '残りベット可能コイン',
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                      ),
-                      Text(
-                        '$remainingCoins枚',
-                        style: Theme.of(context).textTheme.titleLarge,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
               Text('賭け対象一覧', style: Theme.of(context).textTheme.headlineSmall),
               const SizedBox(height: 8),
               Text(
