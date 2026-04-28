@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../models/bet_target.dart';
 import '../models/room_member.dart';
@@ -226,6 +227,7 @@ class _BetPageState extends State<BetPage> {
                       controller: _controllers[target.id]!,
                       focusNode: _focusNodes[target.id]!,
                       isSubmitting: roomState.isSubmittingBet,
+                      isRacing: session.raceStatus.isRacing,
                       onSubmitted: () => _commitBet(target.id),
                       playerBetStatuses: _playerStatusesForTarget(
                         roomState: roomState,
@@ -297,6 +299,7 @@ class _BetTargetCard extends StatelessWidget {
     required this.controller,
     required this.focusNode,
     required this.isSubmitting,
+    required this.isRacing,
     required this.onSubmitted,
     required this.playerBetStatuses,
   });
@@ -305,6 +308,7 @@ class _BetTargetCard extends StatelessWidget {
   final TextEditingController controller;
   final FocusNode focusNode;
   final bool isSubmitting;
+  final bool isRacing;
   final VoidCallback onSubmitted;
   final List<_PlayerTargetBetStatus> playerBetStatuses;
 
@@ -355,7 +359,10 @@ class _BetTargetCard extends StatelessWidget {
                     controller: controller,
                     focusNode: focusNode,
                     keyboardType: TextInputType.number,
-                    enabled: !isSubmitting,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                    ],
+                    enabled: !isSubmitting && !isRacing,
                     onSubmitted: (_) => onSubmitted(),
                     decoration: const InputDecoration(
                       labelText: '賭けるコイン',
