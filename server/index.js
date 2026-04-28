@@ -114,23 +114,21 @@ function handleJoinRoom(socket, payload) {
     return;
   }
 
-  const duplicate =
-    !isRoomMaster &&
-    room.members.some(
-      (member) => member.name.toLowerCase() === userName.toLowerCase(),
-    );
-  if (duplicate) {
-    send(socket, 'error', { message: 'その名前はすでに使用されています。' });
-    return;
-  }
-
   removeMember(socket);
 
   const connection = connections.get(socket);
   const connectionId = connection?.connectionId ?? randomUUID();
-  const memberId = isRoomMaster ? null : connectionId;
+  const normalizedUserName = userName.toLowerCase();
+  const existingMember = isRoomMaster
+    ? null
+    : room.members.find(
+        (member) => member.name.toLowerCase() === normalizedUserName,
+      );
+  const memberId = isRoomMaster
+    ? null
+    : existingMember?.id ?? connectionId;
 
-  if (!isRoomMaster) {
+  if (!isRoomMaster && !existingMember) {
     const member = { id: memberId, name: userName, coins: 500 };
     room.members = [...room.members, member];
   }
@@ -288,31 +286,14 @@ function handleSubmitRaceResults(socket, payload) {
 
 function removeMember(socket) {
   const connection = connections.get(socket);
-  if (!connection?.memberId || !connection.roomId) {
+  if (!connection) {
     return;
   }
-
-  const room = rooms.get(connection.roomId);
-  if (!room) {
-    return;
-  }
-
-  const nextMembers = room.members.filter(
-    (member) => member.id !== connection.memberId,
-  );
-  if (nextMembers.length === room.members.length) {
-    return;
-  }
-
-  room.members = nextMembers;
-  room.bets = room.bets.filter((bet) => bet.memberId !== connection.memberId);
   connections.set(socket, {
     connectionId: connection.connectionId,
     memberId: null,
     roomId: null,
   });
-
-  broadcastRoomSnapshot(room.id);
 }
 
 function broadcastRoomSnapshot(roomId) {
