@@ -22,6 +22,10 @@ class _BetPageState extends State<BetPage> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     final roomState = RoomScope.of(context);
+
+    // ルームの更新を監視（RoomScopeのInheritedNotifierとしての依存性を確保）
+    // これにより、roomStateが更新されるたびにこのウィジェットが再構築される
+
     final session = roomState.session;
     final currentUser = roomState.currentUser;
     if (session == null || currentUser == null) {
@@ -120,11 +124,7 @@ class _BetPageState extends State<BetPage> {
     final currentUser = roomState.currentUser;
 
     if (session == null || currentUser == null) {
-      return const Scaffold(
-        body: Center(
-          child: Text('部屋情報が見つかりませんでした。'),
-        ),
-      );
+      return const Scaffold(body: Center(child: Text('部屋情報が見つかりませんでした。')));
     }
 
     final totalBetCoins = roomState.totalBetCoinsFor(currentUser.id);
@@ -206,10 +206,7 @@ class _BetPageState extends State<BetPage> {
                 ),
               ),
               const SizedBox(height: 16),
-              Text(
-                '賭け対象一覧',
-                style: Theme.of(context).textTheme.headlineSmall,
-              ),
+              Text('賭け対象一覧', style: Theme.of(context).textTheme.headlineSmall),
               const SizedBox(height: 8),
               Text(
                 '入力値はフォーカスが外れたときに確定します。各対象のカード内で、その対象に誰がいくら賭けているかを確認できます。',
@@ -293,7 +290,7 @@ class _BetPageState extends State<BetPage> {
   }
 }
 
-class _BetTargetCard extends StatelessWidget {
+class _BetTargetCard extends StatefulWidget {
   const _BetTargetCard({
     required this.target,
     required this.controller,
@@ -313,14 +310,36 @@ class _BetTargetCard extends StatelessWidget {
   final List<_PlayerTargetBetStatus> playerBetStatuses;
 
   @override
+  State<_BetTargetCard> createState() => _BetTargetCardState();
+}
+
+class _BetTargetCardState extends State<_BetTargetCard> {
+  late double _previousOdds;
+
+  @override
+  void initState() {
+    super.initState();
+    _previousOdds = widget.target.odds;
+  }
+
+  @override
+  void didUpdateWidget(_BetTargetCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // オッズが更新されたかチェック（UI更新をトリガーするため）
+    if (oldWidget.target.odds != widget.target.odds) {
+      _previousOdds = widget.target.odds;
+      // 状態を更新してアニメーションを実行できます
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final target = widget.target;
     final winRatePercent = (target.winRate * 100).toStringAsFixed(0);
 
     return Card(
       elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -339,10 +358,7 @@ class _BetTargetCard extends StatelessWidget {
                 const SizedBox(width: 12),
                 Expanded(
                   flex: 2,
-                  child: _MetricColumn(
-                    label: '勝率',
-                    value: '$winRatePercent%',
-                  ),
+                  child: _MetricColumn(label: '勝率', value: '$winRatePercent%'),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -356,14 +372,12 @@ class _BetTargetCard extends StatelessWidget {
                 SizedBox(
                   width: 120,
                   child: TextField(
-                    controller: controller,
-                    focusNode: focusNode,
+                    controller: widget.controller,
+                    focusNode: widget.focusNode,
                     keyboardType: TextInputType.number,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.digitsOnly,
-                    ],
-                    enabled: !isSubmitting && !isRacing,
-                    onSubmitted: (_) => onSubmitted(),
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    enabled: !widget.isSubmitting && !widget.isRacing,
+                    onSubmitted: (_) => widget.onSubmitted(),
                     decoration: const InputDecoration(
                       labelText: '賭けるコイン',
                       hintText: '100',
@@ -376,17 +390,14 @@ class _BetTargetCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 20),
-            Text(
-              'この対象へのベット状況',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
+            Text('この対象へのベット状況', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 10),
-            if (playerBetStatuses.isEmpty)
+            if (widget.playerBetStatuses.isEmpty)
               Text(
                 'まだ誰もベットしていません',
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
-            for (final status in playerBetStatuses)
+            for (final status in widget.playerBetStatuses)
               Padding(
                 padding: const EdgeInsets.only(bottom: 8),
                 child: _TargetPlayerBetRow(status: status),
@@ -425,10 +436,7 @@ class _TargetPlayerBetRow extends StatelessWidget {
                 ),
                 if (status.isCurrentUser) ...[
                   const SizedBox(width: 8),
-                  Text(
-                    'あなた',
-                    style: Theme.of(context).textTheme.labelMedium,
-                  ),
+                  Text('あなた', style: Theme.of(context).textTheme.labelMedium),
                 ],
               ],
             ),
@@ -450,10 +458,7 @@ class _TargetPlayerBetRow extends StatelessWidget {
 }
 
 class _MetricColumn extends StatelessWidget {
-  const _MetricColumn({
-    required this.label,
-    required this.value,
-  });
+  const _MetricColumn({required this.label, required this.value});
 
   final String label;
   final String value;
@@ -464,15 +469,9 @@ class _MetricColumn extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
-          label,
-          style: Theme.of(context).textTheme.bodySmall,
-        ),
+        Text(label, style: Theme.of(context).textTheme.bodySmall),
         const SizedBox(height: 2),
-        Text(
-          value,
-          style: Theme.of(context).textTheme.bodyMedium,
-        ),
+        Text(value, style: Theme.of(context).textTheme.bodyMedium),
       ],
     );
   }
