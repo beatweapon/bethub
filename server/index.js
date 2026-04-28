@@ -4,6 +4,8 @@ import WebSocket, { WebSocketServer } from 'ws';
 
 const PORT = Number(process.env.PORT ?? 8080);
 const DEFAULT_ROOM_ID = 'main-room';
+const DEFAULT_NEW_TARGET_ODDS = 2.5;
+const DEFAULT_NEW_TARGET_WIN_RATE = 0.5;
 
 const initialBetTargets = [
   { id: 'target-1', name: 'Red Phoenix', winRate: 0.42, odds: 2.1 },
@@ -30,6 +32,8 @@ const rooms = new Map([
         { memberId: 'member-2', targetId: 'target-2', amount: 150 },
         { memberId: 'member-3', targetId: 'target-4', amount: 300 },
       ],
+      raceStatus: 'RaceStatus.betting',
+      results: [],
     },
   ],
 ]);
@@ -73,6 +77,15 @@ function handleMessage(socket, message) {
     case 'submit_bet':
       handleSubmitBet(socket, payload);
       break;
+    case 'update_race_status':
+      handleUpdateRaceStatus(socket, payload);
+      break;
+    case 'add_bet_target':
+      handleAddBetTarget(socket, payload);
+      break;
+    case 'submit_race_results':
+      handleSubmitRaceResults(socket, payload);
+      break;
     default:
       send(socket, 'error', { message: `Unsupported message type: ${type}` });
   }
@@ -81,6 +94,7 @@ function handleMessage(socket, message) {
 function handleJoinRoom(socket, payload) {
   const roomId = typeof payload.roomId === 'string' ? payload.roomId : DEFAULT_ROOM_ID;
   const userName = typeof payload.userName === 'string' ? payload.userName.trim() : '';
+  const isRoomMaster = userName === '管理者';
 
   if (!userName) {
     send(socket, 'error', { message: 'ユーザー名を入力してください。' });
@@ -93,7 +107,7 @@ function handleJoinRoom(socket, payload) {
     return;
   }
 
-  const duplicate = room.members.some(
+  const duplicate = !isRoomMaster && room.members.some(
     (member) => member.name.toLowerCase() === userName.toLowerCase(),
   );
   if (duplicate) {
@@ -104,12 +118,16 @@ function handleJoinRoom(socket, payload) {
   removeMember(socket);
 
   const connection = connections.get(socket);
-  const memberId = connection?.connectionId ?? randomUUID();
-  const member = { id: memberId, name: userName, coins: 500 };
-  room.members = [...room.members, member];
+  const connectionId = connection?.connectionId ?? randomUUID();
+  const memberId = isRoomMaster ? null : connectionId;
 
-  connections.set(socket, { connectionId: memberId, memberId, roomId });
-  send(socket, 'join_room_success', { roomId, memberId });
+  if (!isRoomMaster) {
+    const member = { id: memberId, name: userName, coins: 500 };
+    room.members = [...room.members, member];
+  }
+
+  connections.set(socket, { connectionId, memberId, roomId });
+  send(socket, 'join_room_success', { roomId, memberId, isRoomMaster });
   broadcastRoomSnapshot(roomId);
 }
 
@@ -145,6 +163,104 @@ function handleSubmitBet(socket, payload) {
     room.bets = nextBets;
   }
 
+  broadcastRoomSnapshot(connection.roomId);
+}
+
+function handleUpdateRaceStatus(socket, payload) {
+  const connection = connections.get(socket);
+  if (!connection?.roomId) {
+    send(socket, 'error', { message: '先に入室してください。' });
+    return;
+  }
+
+  const room = rooms.get(connection.roomId);
+  if (!room) {
+    send(socket, 'error', { message: '部屋情報が見つかりません。' });
+    return;
+  }
+
+  const status = typeof payload.status === 'string' ? payload.status : '';
+  const validStatuses = new Set([
+    'RaceStatus.betting',
+    'RaceStatus.racing',
+    'RaceStatus.finished',
+  ]);
+
+  if (!validStatuses.has(status)) {
+    send(socket, 'error', { message: 'レース状態が不正です。' });
+    return;
+  }
+
+  room.raceStatus = status;
+  if (status !== 'RaceStatus.finished') {
+    room.results = [];
+  }
+
+  broadcastRoomSnapshot(connection.roomId);
+}
+
+function handleAddBetTarget(socket, payload) {
+  const connection = connections.get(socket);
+  if (!connection?.roomId) {
+    send(socket, 'error', { message: '先に入室してください。' });
+    return;
+  }
+
+  const room = rooms.get(connection.roomId);
+  if (!room) {
+    send(socket, 'error', { message: '部屋情報が見つかりません。' });
+    return;
+  }
+
+  const targetName = typeof payload.targetName === 'string' ? payload.targetName.trim() : '';
+  if (!targetName) {
+    send(socket, 'error', { message: 'ベット対象名を入力してください。' });
+    return;
+  }
+
+  const betTarget = {
+    id: `target-${randomUUID()}`,
+    name: targetName,
+    winRate: DEFAULT_NEW_TARGET_WIN_RATE,
+    odds: DEFAULT_NEW_TARGET_ODDS,
+  };
+
+  room.betTargets = [...room.betTargets, betTarget];
+  broadcastRoomSnapshot(connection.roomId);
+}
+
+function handleSubmitRaceResults(socket, payload) {
+  const connection = connections.get(socket);
+  if (!connection?.roomId) {
+    send(socket, 'error', { message: '先に入室してください。' });
+    return;
+  }
+
+  const room = rooms.get(connection.roomId);
+  if (!room) {
+    send(socket, 'error', { message: '部屋情報が見つかりません。' });
+    return;
+  }
+
+  const memberIds = Array.isArray(payload.memberIds)
+    ? payload.memberIds.filter((memberId) => typeof memberId === 'string')
+    : [];
+  const playerIds = room.members.map((member) => member.id);
+
+  if (memberIds.length !== playerIds.length) {
+    send(socket, 'error', { message: '順位データが不正です。' });
+    return;
+  }
+
+  const uniqueIds = new Set(memberIds);
+  const hasUnknownMember = memberIds.some((memberId) => !playerIds.includes(memberId));
+  if (uniqueIds.size !== memberIds.length || hasUnknownMember) {
+    send(socket, 'error', { message: '順位データが不正です。' });
+    return;
+  }
+
+  room.raceStatus = 'RaceStatus.finished';
+  room.results = memberIds;
   broadcastRoomSnapshot(connection.roomId);
 }
 
@@ -197,6 +313,8 @@ function broadcastRoomSnapshot(roomId) {
       members: room.members,
       betTargets: room.betTargets,
       bets: room.bets,
+      raceStatus: room.raceStatus,
+      results: room.results,
     });
   }
 }

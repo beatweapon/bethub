@@ -1,3 +1,4 @@
+import '../models/race_status.dart';
 import '../models/room_session.dart';
 
 abstract class RoomRepository {
@@ -10,6 +11,23 @@ abstract class RoomRepository {
     required String memberId,
     required String targetId,
     required int amount,
+  });
+
+  // Room master methods
+  Future<RoomSession> updateRaceStatus({
+    required String roomId,
+    required RaceStatus status,
+  });
+
+  Future<RoomSession> addBetTarget({
+    required String roomId,
+    required String targetName,
+    required double odds,
+  });
+
+  Future<RoomSession> submitRaceResults({
+    required String roomId,
+    required List<String> memberIds,
   });
 
   Future<void> dispose() async {}

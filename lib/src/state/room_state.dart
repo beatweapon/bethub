@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../data/room_repository.dart';
+import '../models/race_status.dart';
 import '../models/room_member.dart';
 import '../models/room_session.dart';
 
@@ -14,11 +15,17 @@ class RoomState extends ChangeNotifier {
   RoomSession? _session;
   bool _isJoining = false;
   bool _isSubmittingBet = false;
+  bool _isUpdatingRaceStatus = false;
+  bool _isAddingBetTarget = false;
+  bool _isSubmittingRaceResults = false;
   StreamSubscription<RoomSession>? _roomSubscription;
 
   RoomSession? get session => _session;
   bool get isJoining => _isJoining;
   bool get isSubmittingBet => _isSubmittingBet;
+  bool get isUpdatingRaceStatus => _isUpdatingRaceStatus;
+  bool get isAddingBetTarget => _isAddingBetTarget;
+  bool get isSubmittingRaceResults => _isSubmittingRaceResults;
 
   RoomMember? get currentUser {
     final session = _session;
@@ -59,10 +66,7 @@ class RoomState extends ChangeNotifier {
     }
   }
 
-  int betAmountFor({
-    required String memberId,
-    required String targetId,
-  }) {
+  int betAmountFor({required String memberId, required String targetId}) {
     final session = _session;
     if (session == null) {
       return 0;
@@ -134,6 +138,73 @@ class RoomState extends ChangeNotifier {
       return nextAmount;
     } finally {
       _isSubmittingBet = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> updateRaceStatus(RaceStatus status) async {
+    final session = _session;
+    if (session == null) {
+      return;
+    }
+
+    _isUpdatingRaceStatus = true;
+    notifyListeners();
+
+    try {
+      final nextSession = await _repository.updateRaceStatus(
+        roomId: session.roomId,
+        status: status,
+      );
+      _session = nextSession;
+    } finally {
+      _isUpdatingRaceStatus = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> addBetTarget({
+    required String targetName,
+    required double odds,
+  }) async {
+    final session = _session;
+    if (session == null) {
+      return;
+    }
+
+    _isAddingBetTarget = true;
+    notifyListeners();
+
+    try {
+      final nextSession = await _repository.addBetTarget(
+        roomId: session.roomId,
+        targetName: targetName,
+        odds: odds,
+      );
+      _session = nextSession;
+    } finally {
+      _isAddingBetTarget = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> submitRaceResults(List<String> memberIds) async {
+    final session = _session;
+    if (session == null) {
+      return;
+    }
+
+    _isSubmittingRaceResults = true;
+    notifyListeners();
+
+    try {
+      final nextSession = await _repository.submitRaceResults(
+        roomId: session.roomId,
+        memberIds: memberIds,
+      );
+      _session = nextSession;
+    } finally {
+      _isSubmittingRaceResults = false;
       notifyListeners();
     }
   }
