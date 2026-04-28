@@ -4,8 +4,6 @@ import WebSocket, { WebSocketServer } from 'ws';
 
 const PORT = Number(process.env.PORT ?? 8080);
 const DEFAULT_ROOM_ID = 'main-room';
-const DEFAULT_NEW_TARGET_ODDS = 2.5;
-const DEFAULT_NEW_TARGET_WIN_RATE = 0.5;
 
 // オッズ計算のパラメータ
 const ODDS_CALCULATION_PARAMS = {
@@ -15,10 +13,10 @@ const ODDS_CALCULATION_PARAMS = {
 };
 
 const initialBetTargets = [
-  { id: 'target-1', name: 'Red Phoenix', winRate: 0.42, odds: 2.1, ranks: [] },
-  { id: 'target-2', name: 'Blue Nova', winRate: 0.28, odds: 3.8, ranks: [] },
-  { id: 'target-3', name: 'Golden Tide', winRate: 0.18, odds: 5.2, ranks: [] },
-  { id: 'target-4', name: 'Silver Fang', winRate: 0.12, odds: 7.4, ranks: [] },
+  { id: 'target-1', name: 'Red Phoenix', ranks: [] },
+  { id: 'target-2', name: 'Blue Nova', ranks: [] },
+  { id: 'target-3', name: 'Golden Tide', ranks: [] },
+  { id: 'target-4', name: 'Silver Fang', ranks: [] },
 ];
 
 const rooms = new Map([
@@ -236,8 +234,6 @@ function handleAddBetTarget(socket, payload) {
   const betTarget = {
     id: `target-${randomUUID()}`,
     name: targetName,
-    winRate: DEFAULT_NEW_TARGET_WIN_RATE,
-    odds: DEFAULT_NEW_TARGET_ODDS,
     ranks: [],
   };
 
@@ -324,6 +320,7 @@ function broadcastRoomSnapshot(roomId) {
   if (!room) {
     return;
   }
+  const snapshotBetTargets = buildSnapshotBetTargets(room);
 
   for (const client of wss.clients) {
     if (client.readyState !== WebSocket.OPEN) {
@@ -339,7 +336,7 @@ function broadcastRoomSnapshot(roomId) {
       roomId: room.id,
       roomName: room.name,
       members: room.members,
-      betTargets: room.betTargets,
+      betTargets: snapshotBetTargets,
       bets: room.bets,
       raceStatus: room.raceStatus,
       results: room.results,
@@ -349,6 +346,16 @@ function broadcastRoomSnapshot(roomId) {
 
 function send(socket, type, payload) {
   socket.send(JSON.stringify({ type, payload }));
+}
+
+function buildSnapshotBetTargets(room) {
+  const winRates = calculateWinRates(room.betTargets);
+  const odds = calculateOdds(room.betTargets, room.bets);
+  return room.betTargets.map((target, index) => ({
+    ...target,
+    odds: Math.max(1, odds[index] || 1),
+    winRate: winRates[index] || 0,
+  }));
 }
 
 // 各BetTargetの実効ランクを計算
@@ -414,14 +421,6 @@ function processPayouts(room) {
       room.members[memberIndex].coins += payout;
     }
   });
-
-  // BetTargetのoddsとwinRateを更新
-  const winRates = calculateWinRates(room.betTargets);
-  room.betTargets = room.betTargets.map((target, index) => ({
-    ...target,
-    odds: Math.max(1, odds[index] || DEFAULT_NEW_TARGET_ODDS),
-    winRate: winRates[index],
-  }));
 
   // 次のレース準備：betsをリセット
   room.bets = [];
