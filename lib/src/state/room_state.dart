@@ -188,7 +188,7 @@ class RoomState extends ChangeNotifier {
     }
   }
 
-  Future<void> submitRaceResults(List<String> memberIds) async {
+  Future<void> submitRaceResults(List<String> betTargetIds) async {
     final session = _session;
     if (session == null) {
       return;
@@ -200,7 +200,7 @@ class RoomState extends ChangeNotifier {
     try {
       final nextSession = await _repository.submitRaceResults(
         roomId: session.roomId,
-        memberIds: memberIds,
+        betTargetIds: betTargetIds,
       );
       _session = nextSession;
     } finally {

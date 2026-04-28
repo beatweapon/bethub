@@ -459,7 +459,7 @@ class WebSocketRoomRepository implements RoomRepository {
   @override
   Future<RoomSession> submitRaceResults({
     required String roomId,
-    required List<String> memberIds,
+    required List<String> betTargetIds,
   }) async {
     await _ensureConnected();
 
@@ -467,7 +467,7 @@ class WebSocketRoomRepository implements RoomRepository {
     _submitRaceResultsCompleter = completer;
     _sendMessage('submit_race_results', {
       'roomId': roomId,
-      'memberIds': memberIds,
+      'betTargetIds': betTargetIds,
     });
 
     return completer.future.timeout(

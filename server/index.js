@@ -4,14 +4,19 @@ import WebSocket, { WebSocketServer } from 'ws';
 
 const PORT = Number(process.env.PORT ?? 8080);
 const DEFAULT_ROOM_ID = 'main-room';
-const DEFAULT_NEW_TARGET_ODDS = 2.5;
-const DEFAULT_NEW_TARGET_WIN_RATE = 0.5;
+
+// オッズ計算のパラメータ
+const ODDS_CALCULATION_PARAMS = {
+  alpha: 0.5, // 人気の影響度
+  beta: 0.5, // 実力の影響度
+  k: 2, // 順位計算の指数
+};
 
 const initialBetTargets = [
-  { id: 'target-1', name: 'Red Phoenix', winRate: 0.42, odds: 2.1 },
-  { id: 'target-2', name: 'Blue Nova', winRate: 0.28, odds: 3.8 },
-  { id: 'target-3', name: 'Golden Tide', winRate: 0.18, odds: 5.2 },
-  { id: 'target-4', name: 'Silver Fang', winRate: 0.12, odds: 7.4 },
+  { id: 'target-1', name: 'Red Phoenix', ranks: [] },
+  { id: 'target-2', name: 'Blue Nova', ranks: [] },
+  { id: 'target-3', name: 'Golden Tide', ranks: [] },
+  { id: 'target-4', name: 'Silver Fang', ranks: [] },
 ];
 
 const rooms = new Map([
@@ -92,8 +97,10 @@ function handleMessage(socket, message) {
 }
 
 function handleJoinRoom(socket, payload) {
-  const roomId = typeof payload.roomId === 'string' ? payload.roomId : DEFAULT_ROOM_ID;
-  const userName = typeof payload.userName === 'string' ? payload.userName.trim() : '';
+  const roomId =
+    typeof payload.roomId === 'string' ? payload.roomId : DEFAULT_ROOM_ID;
+  const userName =
+    typeof payload.userName === 'string' ? payload.userName.trim() : '';
   const isRoomMaster = userName === '管理者';
 
   if (!userName) {
@@ -107,9 +114,11 @@ function handleJoinRoom(socket, payload) {
     return;
   }
 
-  const duplicate = !isRoomMaster && room.members.some(
-    (member) => member.name.toLowerCase() === userName.toLowerCase(),
-  );
+  const duplicate =
+    !isRoomMaster &&
+    room.members.some(
+      (member) => member.name.toLowerCase() === userName.toLowerCase(),
+    );
   if (duplicate) {
     send(socket, 'error', { message: 'その名前はすでに使用されています。' });
     return;
@@ -156,7 +165,10 @@ function handleSubmitBet(socket, payload) {
   );
 
   if (index === -1) {
-    room.bets = [...room.bets, { memberId: connection.memberId, targetId, amount }];
+    room.bets = [
+      ...room.bets,
+      { memberId: connection.memberId, targetId, amount },
+    ];
   } else {
     const nextBets = [...room.bets];
     nextBets[index] = { ...nextBets[index], amount };
@@ -212,7 +224,8 @@ function handleAddBetTarget(socket, payload) {
     return;
   }
 
-  const targetName = typeof payload.targetName === 'string' ? payload.targetName.trim() : '';
+  const targetName =
+    typeof payload.targetName === 'string' ? payload.targetName.trim() : '';
   if (!targetName) {
     send(socket, 'error', { message: 'ベット対象名を入力してください。' });
     return;
@@ -221,8 +234,7 @@ function handleAddBetTarget(socket, payload) {
   const betTarget = {
     id: `target-${randomUUID()}`,
     name: targetName,
-    winRate: DEFAULT_NEW_TARGET_WIN_RATE,
-    odds: DEFAULT_NEW_TARGET_ODDS,
+    ranks: [],
   };
 
   room.betTargets = [...room.betTargets, betTarget];
@@ -242,25 +254,35 @@ function handleSubmitRaceResults(socket, payload) {
     return;
   }
 
-  const memberIds = Array.isArray(payload.memberIds)
-    ? payload.memberIds.filter((memberId) => typeof memberId === 'string')
+  const betTargetIds = Array.isArray(payload.betTargetIds)
+    ? payload.betTargetIds.filter((id) => typeof id === 'string')
     : [];
-  const playerIds = room.members.map((member) => member.id);
+  const targetIds = room.betTargets.map((target) => target.id);
 
-  if (memberIds.length !== playerIds.length) {
+  if (betTargetIds.length !== targetIds.length) {
     send(socket, 'error', { message: '順位データが不正です。' });
     return;
   }
 
-  const uniqueIds = new Set(memberIds);
-  const hasUnknownMember = memberIds.some((memberId) => !playerIds.includes(memberId));
-  if (uniqueIds.size !== memberIds.length || hasUnknownMember) {
+  const uniqueIds = new Set(betTargetIds);
+  const hasUnknownTarget = betTargetIds.some((id) => !targetIds.includes(id));
+  if (uniqueIds.size !== betTargetIds.length || hasUnknownTarget) {
     send(socket, 'error', { message: '順位データが不正です。' });
     return;
   }
 
   room.raceStatus = 'RaceStatus.finished';
-  room.results = memberIds;
+  room.results = betTargetIds;
+
+  // 各BetTargetにranksを追加し、オッズと勝率を更新
+  room.betTargets = room.betTargets.map((target) => ({
+    ...target,
+    ranks: [...target.ranks, betTargetIds.indexOf(target.id) + 1],
+  }));
+
+  // オッズの再計算と配当の払い戻し
+  processPayouts(room);
+
   broadcastRoomSnapshot(connection.roomId);
 }
 
@@ -275,7 +297,9 @@ function removeMember(socket) {
     return;
   }
 
-  const nextMembers = room.members.filter((member) => member.id !== connection.memberId);
+  const nextMembers = room.members.filter(
+    (member) => member.id !== connection.memberId,
+  );
   if (nextMembers.length === room.members.length) {
     return;
   }
@@ -296,6 +320,7 @@ function broadcastRoomSnapshot(roomId) {
   if (!room) {
     return;
   }
+  const snapshotBetTargets = buildSnapshotBetTargets(room);
 
   for (const client of wss.clients) {
     if (client.readyState !== WebSocket.OPEN) {
@@ -311,7 +336,7 @@ function broadcastRoomSnapshot(roomId) {
       roomId: room.id,
       roomName: room.name,
       members: room.members,
-      betTargets: room.betTargets,
+      betTargets: snapshotBetTargets,
       bets: room.bets,
       raceStatus: room.raceStatus,
       results: room.results,
@@ -322,3 +347,83 @@ function broadcastRoomSnapshot(roomId) {
 function send(socket, type, payload) {
   socket.send(JSON.stringify({ type, payload }));
 }
+
+function buildSnapshotBetTargets(room) {
+  const winRates = calculateWinRates(room.betTargets);
+  const odds = calculateOdds(room.betTargets, room.bets);
+  return room.betTargets.map((target, index) => ({
+    ...target,
+    odds: Math.max(1, odds[index] || 1),
+    winRate: winRates[index] || 0,
+  }));
+}
+
+// 各BetTargetの実効ランクを計算
+function calculateEffectiveRank(ranks) {
+  if (ranks.length === 0) return 999;
+  const avgRank = ranks.reduce((a, b) => a + b, 0) / ranks.length;
+  return Math.max(1, avgRank);
+}
+
+// 勝率を計算: p_i = (1 / effectiveRank_i^k) / Σ (1 / effectiveRank_j^k)
+function calculateWinRates(betTargets) {
+  const { k } = ODDS_CALCULATION_PARAMS;
+  const inverseRanks = betTargets.map((target) => {
+    const effectiveRank = calculateEffectiveRank(target.ranks);
+    return 1 / Math.pow(effectiveRank, k);
+  });
+  const sumInverseRanks = inverseRanks.reduce((a, b) => a + b, 0);
+  return inverseRanks.map((inv) =>
+    sumInverseRanks > 0 ? inv / sumInverseRanks : 0,
+  );
+}
+
+// オッズを計算: odds_i = Σ bet_j / effective_weight_i
+// effective_weight_i = (bet_i^α) * (p_i^β)
+function calculateOdds(betTargets, bets) {
+  const { alpha, beta } = ODDS_CALCULATION_PARAMS;
+  const winRates = calculateWinRates(betTargets);
+
+  // 各BetTargetへの賭け合計を計算
+  const betsByTarget = new Map();
+  bets.forEach((bet) => {
+    const current = betsByTarget.get(bet.targetId) || 0;
+    betsByTarget.set(bet.targetId, current + bet.amount);
+  });
+
+  const totalBets = bets.reduce((sum, bet) => sum + bet.amount, 0) || 1;
+
+  return betTargets.map((target, index) => {
+    const bet_i = betsByTarget.get(target.id) || 1;
+    const p_i = winRates[index];
+    const effectiveWeight =
+      Math.pow(bet_i, alpha) * Math.pow(Math.max(0.01, p_i), beta);
+    return effectiveWeight > 0 ? totalBets / effectiveWeight : 0;
+  });
+}
+
+// 配当を処理して払い戻す
+function processPayouts(room) {
+  const odds = calculateOdds(room.betTargets, room.bets);
+  const winnerTargetId = room.results[0]; // 1位の競技対象ID
+
+  // 1位の対象にベットした人に配当を払い戻す
+  const winnerBets = room.bets.filter((bet) => bet.targetId === winnerTargetId);
+  const winnerTargetIndex = room.betTargets.findIndex(
+    (t) => t.id === winnerTargetId,
+  );
+  const winnerOdds = winnerTargetIndex !== -1 ? odds[winnerTargetIndex] : 1;
+
+  winnerBets.forEach((bet) => {
+    const memberIndex = room.members.findIndex((m) => m.id === bet.memberId);
+    if (memberIndex !== -1) {
+      const payout = Math.floor(bet.amount * Math.max(1, winnerOdds));
+      room.members[memberIndex].coins += payout;
+    }
+  });
+
+  // 次のレース準備：betsをリセット
+  room.bets = [];
+  room.raceStatus = 'RaceStatus.betting';
+}
+
