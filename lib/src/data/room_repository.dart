@@ -27,7 +27,7 @@ abstract class RoomRepository {
 
   Future<RoomSession> submitRaceResults({
     required String roomId,
-    required List<String> memberIds,
+    required List<String> betTargetIds,
   });
 
   Future<void> dispose() async {}

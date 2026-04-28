@@ -13,7 +13,7 @@ class RoomMasterPage extends StatefulWidget {
 
 class _RoomMasterPageState extends State<RoomMasterPage> {
   final _targetNameController = TextEditingController();
-  final Map<String, int> _memberRankings = {};
+  final Map<String, int> _betTargetRankings = {};
   bool _isInitialized = false;
   static const double _defaultOdds = 2.5;
 
@@ -33,11 +33,9 @@ class _RoomMasterPageState extends State<RoomMasterPage> {
     final roomState = RoomScope.of(context);
     final session = roomState.session;
     if (session != null) {
-      // Initialize rankings with players only (not room master)
-      for (final member in session.members) {
-        if (member.role == MemberRole.player) {
-          _memberRankings[member.id] = 0;
-        }
+      // Initialize rankings with bet targets
+      for (final target in session.betTargets) {
+        _betTargetRankings[target.id] = 0;
       }
     }
 
@@ -99,22 +97,22 @@ class _RoomMasterPageState extends State<RoomMasterPage> {
 
   Future<void> _submitResults() async {
     // Validate that all rankings are set
-    final notRanked = _memberRankings.values.where((rank) => rank == 0);
+    final notRanked = _betTargetRankings.values.where((rank) => rank == 0);
     if (notRanked.isNotEmpty) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('すべてのメンバーに順位を割り当ててください')));
+      ).showSnackBar(const SnackBar(content: Text('すべてのベット対象に順位を割り当ててください')));
       return;
     }
 
-    // Sort members by ranking
-    final sortedMembers = _memberRankings.entries.toList()
+    // Sort targets by ranking
+    final sortedTargets = _betTargetRankings.entries.toList()
       ..sort((a, b) => a.value.compareTo(b.value));
-    final memberIds = sortedMembers.map((e) => e.key).toList();
+    final betTargetIds = sortedTargets.map((e) => e.key).toList();
 
     final roomState = RoomScope.of(context);
     try {
-      await roomState.submitRaceResults(memberIds);
+      await roomState.submitRaceResults(betTargetIds);
       if (mounted) {
         ScaffoldMessenger.of(
           context,
@@ -271,7 +269,7 @@ class _RoomMasterPageState extends State<RoomMasterPage> {
               Text('レース結果入力', style: Theme.of(context).textTheme.titleLarge),
               const SizedBox(height: 12),
               Text(
-                'メンバーの最終順位を入力してください',
+                'ベット対象の最終順位を入力してください',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
               const SizedBox(height: 16),
@@ -300,13 +298,11 @@ class _RoomMasterPageState extends State<RoomMasterPage> {
   }
 
   List<Widget> _buildRankingInputs(dynamic session) {
-    final players = session.members
-        .where((m) => m.role == MemberRole.player)
-        .toList();
+    final targets = session.betTargets;
     final widgets = <Widget>[];
 
-    for (int i = 0; i < players.length; i++) {
-      final player = players[i];
+    for (int i = 0; i < targets.length; i++) {
+      final target = targets[i];
       widgets.add(
         Card(
           elevation: 0,
@@ -317,7 +313,7 @@ class _RoomMasterPageState extends State<RoomMasterPage> {
             padding: const EdgeInsets.all(12),
             child: Row(
               children: [
-                Expanded(child: Text(player.name)),
+                Expanded(child: Text(target.name)),
                 SizedBox(
                   width: 60,
                   child: TextField(
@@ -331,7 +327,7 @@ class _RoomMasterPageState extends State<RoomMasterPage> {
                     ),
                     keyboardType: TextInputType.number,
                     onChanged: (value) {
-                      _memberRankings[player.id] = int.tryParse(value) ?? 0;
+                      _betTargetRankings[target.id] = int.tryParse(value) ?? 0;
                     },
                   ),
                 ),
@@ -340,7 +336,7 @@ class _RoomMasterPageState extends State<RoomMasterPage> {
           ),
         ),
       );
-      if (i < players.length - 1) {
+      if (i < targets.length - 1) {
         widgets.add(const SizedBox(height: 8));
       }
     }
