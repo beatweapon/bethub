@@ -1,17 +1,29 @@
-# bet_hub
+# Bet Hub
 
-A new Flutter project.
+Flutter Web で動くベット共有アプリです。GitHub Pages へデプロイできるようにしてあり、WebSocket サーバー URL は GitHub Actions の Variables からビルド時に注入できます。
 
-## Getting Started
+## Local development
 
-This project is a starting point for a Flutter application.
+Flutter アプリは `ROOM_SERVER_URL` を `--dart-define` で指定して起動できます。
 
-A few resources to get you started if this is your first Flutter project:
+```bash
+flutter run -d chrome --dart-define=ROOM_SERVER_URL=ws://localhost:8080
+```
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+## Deploy to GitHub Pages
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+`main` ブランチへ push すると、`.github/workflows/deploy-pages.yml` で Flutter Web をビルドして GitHub Pages へデプロイします。
+
+事前に GitHub リポジトリで以下を設定してください。
+
+1. `Settings > Pages` で `Source` を `GitHub Actions` にする
+2. `Settings > Secrets and variables > Actions > Variables` に `ROOM_SERVER_URL` を追加する
+
+例:
+
+```text
+wss://your-websocket-server.example.com
+```
+
+ワークフローはリポジトリ名に応じて `base href` を自動計算します。
+`username.github.io` リポジトリなら `/`、通常のリポジトリなら `/<repo>/` を使うので、そのまま Pages 配信に乗せられます。

@@ -14,6 +14,8 @@ class BetHubApp extends StatefulWidget {
 }
 
 class _BetHubAppState extends State<BetHubApp> {
+  static const _defaultRoomServerUrl = 'ws://localhost:8080';
+
   late final RoomState _roomState;
 
   @override
@@ -23,10 +25,13 @@ class _BetHubAppState extends State<BetHubApp> {
   }
 
   RoomRepository _buildRepository() {
-    const roomServerUrl = String.fromEnvironment(
+    const configuredRoomServerUrl = String.fromEnvironment(
       'ROOM_SERVER_URL',
-      defaultValue: 'ws://localhost:8080',
+      defaultValue: _defaultRoomServerUrl,
     );
+    final roomServerUrl = configuredRoomServerUrl.trim().isEmpty
+        ? _defaultRoomServerUrl
+        : configuredRoomServerUrl.trim();
     return WebSocketRoomRepository(serverUrl: roomServerUrl);
   }
 
