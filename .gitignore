@@ -33,6 +33,12 @@ migrate_working_dir/
 /build/
 /coverage/
 node_modules/
+.env
+.env.*
+**/.env
+**/.env.*
+!.env.example
+!**/.env.example
 
 # Symbolication related
 app.*.symbols

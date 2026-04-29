@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 import 'data/room_repository.dart';
 import 'data/web_socket_room_repository.dart';
@@ -23,10 +24,10 @@ class _BetHubAppState extends State<BetHubApp> {
   }
 
   RoomRepository _buildRepository() {
-    const roomServerUrl = String.fromEnvironment(
-      'ROOM_SERVER_URL',
-      defaultValue: 'ws://localhost:8080',
-    );
+    final roomServerUrl =
+        dotenv.env['ROOM_SERVER_URL']?.trim().isNotEmpty == true
+            ? dotenv.env['ROOM_SERVER_URL']!.trim()
+            : 'ws://localhost:8080';
     return WebSocketRoomRepository(serverUrl: roomServerUrl);
   }
 
