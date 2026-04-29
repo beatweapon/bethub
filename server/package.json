@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "start:mock": "node index.js --mock"
   },
   "dependencies": {
     "ws": "^8.18.3"

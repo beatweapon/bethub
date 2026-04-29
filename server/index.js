@@ -4,6 +4,8 @@ import WebSocket, { WebSocketServer } from 'ws';
 
 const PORT = Number(process.env.PORT ?? 8080);
 const DEFAULT_ROOM_ID = 'main-room';
+const ENABLE_MOCK_DATA =
+  process.argv.includes('--mock') || process.env.ENABLE_MOCK_DATA === 'true';
 
 // オッズ計算のパラメータ
 const ODDS_CALCULATION_PARAMS = {
@@ -12,36 +14,14 @@ const ODDS_CALCULATION_PARAMS = {
   k: 2, // 順位計算の指数
 };
 
-const initialBetTargets = [
+const mockBetTargets = [
   { id: 'target-1', name: 'Red Phoenix', ranks: [] },
   { id: 'target-2', name: 'Blue Nova', ranks: [] },
   { id: 'target-3', name: 'Golden Tide', ranks: [] },
   { id: 'target-4', name: 'Silver Fang', ranks: [] },
 ];
 
-const rooms = new Map([
-  [
-    DEFAULT_ROOM_ID,
-    {
-      id: DEFAULT_ROOM_ID,
-      name: 'Bet Hub Room',
-      members: [
-        { id: 'member-1', name: 'Saki', coins: 720 },
-        { id: 'member-2', name: 'Taro', coins: 430 },
-        { id: 'member-3', name: 'Mina', coins: 910 },
-      ],
-      betTargets: initialBetTargets,
-      bets: [
-        { memberId: 'member-1', targetId: 'target-1', amount: 120 },
-        { memberId: 'member-1', targetId: 'target-3', amount: 80 },
-        { memberId: 'member-2', targetId: 'target-2', amount: 150 },
-        { memberId: 'member-3', targetId: 'target-4', amount: 300 },
-      ],
-      raceStatus: 'RaceStatus.betting',
-      results: [],
-    },
-  ],
-]);
+const rooms = new Map([[DEFAULT_ROOM_ID, createInitialRoom()]]);
 
 const connections = new Map();
 
@@ -69,7 +49,47 @@ wss.on('connection', (socket) => {
 
 server.listen(PORT, () => {
   console.log(`Bet Hub WebSocket server listening on ws://localhost:${PORT}`);
+  if (ENABLE_MOCK_DATA) {
+    console.log('Mock data seed is enabled for the default room.');
+  }
 });
+
+function createInitialRoom() {
+  if (!ENABLE_MOCK_DATA) {
+    return createEmptyRoom();
+  }
+
+  return {
+    id: DEFAULT_ROOM_ID,
+    name: 'Bet Hub Room',
+    members: [
+      { id: 'member-1', name: 'Saki', coins: 720 },
+      { id: 'member-2', name: 'Taro', coins: 430 },
+      { id: 'member-3', name: 'Mina', coins: 910 },
+    ],
+    betTargets: mockBetTargets.map((target) => ({ ...target, ranks: [] })),
+    bets: [
+      { memberId: 'member-1', targetId: 'target-1', amount: 120 },
+      { memberId: 'member-1', targetId: 'target-3', amount: 80 },
+      { memberId: 'member-2', targetId: 'target-2', amount: 150 },
+      { memberId: 'member-3', targetId: 'target-4', amount: 300 },
+    ],
+    raceStatus: 'RaceStatus.betting',
+    results: [],
+  };
+}
+
+function createEmptyRoom() {
+  return {
+    id: DEFAULT_ROOM_ID,
+    name: 'Bet Hub Room',
+    members: [],
+    betTargets: [],
+    bets: [],
+    raceStatus: 'RaceStatus.betting',
+    results: [],
+  };
+}
 
 function handleMessage(socket, message) {
   const type = message?.type;

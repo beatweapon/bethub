@@ -10,6 +10,12 @@ Flutter アプリは `ROOM_SERVER_URL` を `--dart-define` で指定して起動
 flutter run -d chrome --dart-define=ROOM_SERVER_URL=ws://localhost:8080
 ```
 
+サーバー側は通常起動だと空のルームで立ち上がります。サンプル参加者・ベット対象付きでサクッと確認したい場合は、`server` ディレクトリで次を実行します。
+
+```bash
+npm run start:mock
+```
+
 ## Deploy to GitHub Pages
 
 `main` ブランチへ push すると、`.github/workflows/deploy-pages.yml` で Flutter Web をビルドして GitHub Pages へデプロイします。
