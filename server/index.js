@@ -25,7 +25,16 @@ const rooms = new Map([[DEFAULT_ROOM_ID, createInitialRoom()]]);
 
 const connections = new Map();
 
-const server = createServer();
+const server = createServer((request, response) => {
+  if (request.method === 'GET' && request.url === '/health') {
+    response.writeHead(200, { 'Content-Type': 'application/json' });
+    response.end(JSON.stringify({ ok: true }));
+    return;
+  }
+
+  response.writeHead(404, { 'Content-Type': 'application/json' });
+  response.end(JSON.stringify({ message: 'Not found' }));
+});
 const wss = new WebSocketServer({ server });
 
 wss.on('connection', (socket) => {
@@ -111,9 +120,18 @@ function handleMessage(socket, message) {
     case 'submit_race_results':
       handleSubmitRaceResults(socket, payload);
       break;
+    case 'ping':
+      handlePing(socket, payload);
+      break;
     default:
       send(socket, 'error', { message: `Unsupported message type: ${type}` });
   }
+}
+
+function handlePing(socket, payload) {
+  const timestamp =
+    typeof payload.timestamp === 'string' ? payload.timestamp : null;
+  send(socket, 'pong', { timestamp });
 }
 
 function handleJoinRoom(socket, payload) {

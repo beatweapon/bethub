@@ -42,6 +42,10 @@ class RoomState extends ChangeNotifier {
     return null;
   }
 
+  Future<void> prewarmServer() {
+    return _repository.prewarmServer();
+  }
+
   Future<void> joinRoom(String userName) async {
     if (_isJoining) {
       return;
@@ -165,7 +169,6 @@ class RoomState extends ChangeNotifier {
 
   Future<void> addBetTarget({
     required String targetName,
-    required double odds,
   }) async {
     final session = _session;
     if (session == null) {
@@ -179,7 +182,6 @@ class RoomState extends ChangeNotifier {
       final nextSession = await _repository.addBetTarget(
         roomId: session.roomId,
         targetName: targetName,
-        odds: odds,
       );
       _session = nextSession;
     } finally {

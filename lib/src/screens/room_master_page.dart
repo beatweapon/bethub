@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../models/race_status.dart';
+import '../models/room_session.dart';
 import '../state/room_scope.dart';
 
 class RoomMasterPage extends StatefulWidget {
@@ -14,32 +15,21 @@ class RoomMasterPage extends StatefulWidget {
 class _RoomMasterPageState extends State<RoomMasterPage> {
   final _targetNameController = TextEditingController();
   final Map<String, int> _betTargetRankings = {};
-  bool _isInitialized = false;
-  static const double _defaultOdds = 2.5;
-
-  @override
-  void initState() {
-    super.initState();
-  }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-
-    if (_isInitialized) {
+    final roomState = RoomScope.of(context);
+    final session = roomState.session;
+    if (session == null) {
       return;
     }
 
-    final roomState = RoomScope.of(context);
-    final session = roomState.session;
-    if (session != null) {
-      // Initialize rankings with bet targets
-      for (final target in session.betTargets) {
-        _betTargetRankings[target.id] = 0;
-      }
+    final nextTargetIds = session.betTargets.map((target) => target.id).toSet();
+    _betTargetRankings.removeWhere((targetId, _) => !nextTargetIds.contains(targetId));
+    for (final target in session.betTargets) {
+      _betTargetRankings.putIfAbsent(target.id, () => 0);
     }
-
-    _isInitialized = true;
   }
 
   @override
@@ -60,7 +50,6 @@ class _RoomMasterPageState extends State<RoomMasterPage> {
     try {
       await roomState.addBetTarget(
         targetName: _targetNameController.text.trim(),
-        odds: _defaultOdds,
       );
       _targetNameController.clear();
       if (mounted) {
@@ -193,11 +182,6 @@ class _RoomMasterPageState extends State<RoomMasterPage> {
                         enabled: !roomState.isAddingBetTarget,
                       ),
                       const SizedBox(height: 12),
-                      Text(
-                        'オッズは自動算出予定のため、現在は固定値 ${_defaultOdds.toStringAsFixed(1)} を設定します。',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                      const SizedBox(height: 12),
                       FilledButton(
                         onPressed: roomState.isAddingBetTarget
                             ? null
@@ -297,7 +281,7 @@ class _RoomMasterPageState extends State<RoomMasterPage> {
     );
   }
 
-  List<Widget> _buildRankingInputs(dynamic session) {
+  List<Widget> _buildRankingInputs(RoomSession session) {
     final targets = session.betTargets;
     final widgets = <Widget>[];
 

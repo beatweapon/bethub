@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../data/room_repository.dart';
@@ -15,6 +17,17 @@ class EntryPage extends StatefulWidget {
 class _EntryPageState extends State<EntryPage> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      unawaited(RoomScope.of(context).prewarmServer());
+    });
+  }
 
   @override
   void dispose() {
