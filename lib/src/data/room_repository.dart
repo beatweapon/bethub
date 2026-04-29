@@ -2,6 +2,8 @@ import '../models/race_status.dart';
 import '../models/room_session.dart';
 
 abstract class RoomRepository {
+  Future<void> prewarmServer() async {}
+
   Future<RoomSession> joinRoom({required String userName});
 
   Stream<RoomSession> watchRoom(String roomId);
@@ -22,7 +24,6 @@ abstract class RoomRepository {
   Future<RoomSession> addBetTarget({
     required String roomId,
     required String targetName,
-    required double odds,
   });
 
   Future<RoomSession> submitRaceResults({

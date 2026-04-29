@@ -1,65 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
+import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../models/race_status.dart';
 import '../models/room_session.dart';
 import 'room_repository.dart';
-
-// Platform specific imports
-import 'dart:io' as io show WebSocket;
-import 'dart:html' as html show WebSocket;
-
-/// WebSocketチャネルの統一インターフェース
-abstract interface class _WebSocketChannel {
-  Future<void> close();
-  void send(String message);
-  Stream<dynamic> get onMessage;
-}
-
-/// Web プラットフォーム用の WebSocket チャネル
-class _WebSocketChannelWeb implements _WebSocketChannel {
-  final html.WebSocket _ws;
-
-  _WebSocketChannelWeb(this._ws);
-
-  @override
-  Future<void> close() async {
-    _ws.close();
-    // html.WebSocket.close() は void を返すため、
-    // 接続状態が変わるまでの遅延を入れる
-    await Future.delayed(const Duration(milliseconds: 100));
-  }
-
-  @override
-  void send(String message) {
-    if (_ws.readyState == 1) {
-      _ws.send(message);
-    }
-  }
-
-  @override
-  Stream<dynamic> get onMessage => _ws.onMessage.map((event) => event.data);
-}
-
-/// IO プラットフォーム用の WebSocket チャネル
-class _WebSocketChannelIO implements _WebSocketChannel {
-  final io.WebSocket _ws;
-
-  _WebSocketChannelIO(this._ws);
-
-  @override
-  Future<void> close() => _ws.close();
-
-  @override
-  void send(String message) {
-    _ws.add(message);
-  }
-
-  @override
-  Stream<dynamic> get onMessage => _ws;
-}
 
 class WebSocketRoomRepository implements RoomRepository {
   WebSocketRoomRepository({required this.serverUrl, this.roomId = 'main-room'});
@@ -67,18 +14,38 @@ class WebSocketRoomRepository implements RoomRepository {
   final String serverUrl;
   final String roomId;
 
-  _WebSocketChannel? _channel;
-  StreamSubscription<dynamic>? _subscription;
+  WebSocketChannel? _channel;
+  StreamSubscription<Object?>? _subscription;
   StreamController<RoomSession>? _controller;
   Future<void>? _connectFuture;
+  Future<void>? _prewarmFuture;
   RoomSession? _session;
   String? _memberId;
   bool _isRoomMaster = false;
+  Timer? _keepAliveTimer;
   Completer<RoomSession>? _joinCompleter;
   Completer<RoomSession>? _submitBetCompleter;
   Completer<RoomSession>? _updateRaceStatusCompleter;
   Completer<RoomSession>? _addBetTargetCompleter;
   Completer<RoomSession>? _submitRaceResultsCompleter;
+
+  @override
+  Future<void> prewarmServer() async {
+    final pending = _prewarmFuture;
+    if (pending != null) {
+      return pending;
+    }
+
+    final future = _sendWarmUpRequest();
+    _prewarmFuture = future;
+    try {
+      await future;
+    } catch (_) {
+      // Warm-up is best-effort only. Join flow handles real connection errors.
+    } finally {
+      _prewarmFuture = null;
+    }
+  }
 
   @override
   Future<RoomSession> joinRoom({required String userName}) async {
@@ -176,82 +143,58 @@ class WebSocketRoomRepository implements RoomRepository {
   }
 
   Future<void> _connect() async {
-    if (kIsWeb) {
-      await _connectWeb();
-    } else {
-      await _connectIO();
-    }
-  }
-
-  Future<void> _connectWeb() async {
-    final completer = Completer<void>();
-
     try {
-      final webSocket = html.WebSocket(serverUrl);
-      final channel = _WebSocketChannelWeb(webSocket);
+      final channel = WebSocketChannel.connect(Uri.parse(serverUrl));
       _channel = channel;
       _controller ??= StreamController<RoomSession>.broadcast();
 
-      // 接続完了を待つ
-      webSocket.onOpen.first.then((_) {
-        if (!completer.isCompleted) {
-          completer.complete();
-        }
-      });
-
-      // メッセージ受信
-      _subscription = channel.onMessage.listen(
-        (event) {
-          _handleMessage(event);
-        },
+      _subscription = channel.stream.listen(
+        _handleMessage,
         onError: (Object error) {
           _handleStreamFailure(error);
-          if (!completer.isCompleted) {
-            completer.completeError(error);
-          }
         },
         onDone: () {
+          _stopKeepAlive();
           _channel = null;
         },
       );
 
-      // エラーハンドリング
-      webSocket.onError.listen((event) {
-        _handleStreamFailure(Exception('WebSocket error'));
-        if (!completer.isCompleted) {
-          completer.completeError(Exception('WebSocket connection failed'));
-        }
-      });
-
-      // タイムアウト
-      await completer.future.timeout(const Duration(seconds: 5));
+      await channel.ready.timeout(const Duration(seconds: 5));
+      _startKeepAlive();
     } catch (error) {
       _handleStreamFailure(error);
       rethrow;
     }
   }
 
-  Future<void> _connectIO() async {
-    try {
-      final webSocket = await io.WebSocket.connect(serverUrl);
-      final channel = _WebSocketChannelIO(webSocket);
-      _channel = channel;
-      _controller ??= StreamController<RoomSession>.broadcast();
-
-      _subscription = channel.onMessage.listen(
-        _handleMessage,
-        onError: _handleStreamFailure,
-        onDone: () {
-          _channel = null;
-        },
-      );
-    } catch (error) {
-      _handleStreamFailure(error);
-      rethrow;
+  Future<void> _sendWarmUpRequest() async {
+    final uri = _buildHealthCheckUri();
+    if (uri == null) {
+      return;
     }
+
+    await http.get(uri).timeout(const Duration(seconds: 20));
   }
 
-  void _handleMessage(dynamic rawMessage) {
+  Uri? _buildHealthCheckUri() {
+    final serverUri = Uri.tryParse(serverUrl);
+    if (serverUri == null || !serverUri.hasScheme) {
+      return null;
+    }
+
+    final scheme = switch (serverUri.scheme) {
+      'ws' => 'http',
+      'wss' => 'https',
+      'http' || 'https' => serverUri.scheme,
+      _ => null,
+    };
+    if (scheme == null) {
+      return null;
+    }
+
+    return serverUri.replace(scheme: scheme, path: '/health', query: '');
+  }
+  void _handleMessage(Object? rawMessage) {
     final json = jsonDecode(rawMessage as String) as Map<String, dynamic>;
     final type = json['type'] as String? ?? '';
     final payload = json['payload'] as Map<String, dynamic>? ?? const {};
@@ -339,6 +282,8 @@ class WebSocketRoomRepository implements RoomRepository {
           _submitRaceResultsCompleter = null;
         }
         break;
+      case 'pong':
+        break;
     }
   }
 
@@ -360,6 +305,7 @@ class WebSocketRoomRepository implements RoomRepository {
   }
 
   void _handleStreamFailure(Object error) {
+    _stopKeepAlive();
     _channel = null;
     final joinCompleter = _joinCompleter;
     if (joinCompleter != null && !joinCompleter.isCompleted) {
@@ -405,7 +351,29 @@ class WebSocketRoomRepository implements RoomRepository {
     }
 
     final message = jsonEncode({'type': type, 'payload': payload});
-    channel.send(message);
+    channel.sink.add(message);
+  }
+
+  void _startKeepAlive() {
+    _keepAliveTimer?.cancel();
+    _keepAliveTimer = Timer.periodic(const Duration(seconds: 45), (_) {
+      final channel = _channel;
+      if (channel == null) {
+        _stopKeepAlive();
+        return;
+      }
+
+      final message = jsonEncode({
+        'type': 'ping',
+        'payload': {'timestamp': DateTime.now().toUtc().toIso8601String()},
+      });
+      channel.sink.add(message);
+    });
+  }
+
+  void _stopKeepAlive() {
+    _keepAliveTimer?.cancel();
+    _keepAliveTimer = null;
   }
 
   @override
@@ -435,7 +403,6 @@ class WebSocketRoomRepository implements RoomRepository {
   Future<RoomSession> addBetTarget({
     required String roomId,
     required String targetName,
-    required double odds,
   }) async {
     await _ensureConnected();
 
@@ -444,7 +411,6 @@ class WebSocketRoomRepository implements RoomRepository {
     _sendMessage('add_bet_target', {
       'roomId': roomId,
       'targetName': targetName,
-      'odds': odds,
     });
 
     return completer.future.timeout(
@@ -483,10 +449,11 @@ class WebSocketRoomRepository implements RoomRepository {
 
   @override
   Future<void> dispose() async {
+    _stopKeepAlive();
     await _subscription?.cancel();
     final channel = _channel;
     if (channel != null) {
-      await channel.close();
+      await channel.sink.close();
     }
     await _controller?.close();
     _channel = null;

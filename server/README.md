@@ -8,6 +8,7 @@ npm start
 ```
 
 The server starts on `ws://localhost:8080` by default with an empty room.
+It also responds to `GET /health` so the client can warm up the Render instance before joining.
 
 ## Local mock seed
 

@@ -481,7 +481,7 @@ class _PayoutResultDialog extends StatelessWidget {
                 width: double.infinity,
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: surfaceColor.withOpacity(0.85),
+                  color: surfaceColor.withValues(alpha: 0.85),
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: Column(
@@ -557,24 +557,6 @@ class _BetTargetCard extends StatefulWidget {
 }
 
 class _BetTargetCardState extends State<_BetTargetCard> {
-  late double _previousOdds;
-
-  @override
-  void initState() {
-    super.initState();
-    _previousOdds = widget.target.odds;
-  }
-
-  @override
-  void didUpdateWidget(_BetTargetCard oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    // オッズが更新されたかチェック（UI更新をトリガーするため）
-    if (oldWidget.target.odds != widget.target.odds) {
-      _previousOdds = widget.target.odds;
-      // 状態を更新してアニメーションを実行できます
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final target = widget.target;
