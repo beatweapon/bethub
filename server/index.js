@@ -26,6 +26,18 @@ const rooms = new Map([[DEFAULT_ROOM_ID, createInitialRoom()]]);
 const connections = new Map();
 
 const server = createServer((request, response) => {
+  // CORS ヘッダーを設定
+  response.setHeader('Access-Control-Allow-Origin', '*');
+  response.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  response.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  // プリフライトリクエストに対応
+  if (request.method === 'OPTIONS') {
+    response.writeHead(200);
+    response.end();
+    return;
+  }
+
   if (request.method === 'GET' && request.url === '/health') {
     response.writeHead(200, { 'Content-Type': 'application/json' });
     response.end(JSON.stringify({ ok: true }));
