@@ -192,8 +192,9 @@ class WebSocketRoomRepository implements RoomRepository {
       return null;
     }
 
-    return serverUri.replace(scheme: scheme, path: '/health', query: '');
+    return serverUri.replace(scheme: scheme, path: '/health', query: null);
   }
+
   void _handleMessage(Object? rawMessage) {
     final json = jsonDecode(rawMessage as String) as Map<String, dynamic>;
     final type = json['type'] as String? ?? '';
