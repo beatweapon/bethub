@@ -18,6 +18,7 @@ class RoomState extends ChangeNotifier {
   bool _isUpdatingRaceStatus = false;
   bool _isAddingBetTarget = false;
   bool _isSubmittingRaceResults = false;
+  bool _isWakingServer = false;
   StreamSubscription<RoomSession>? _roomSubscription;
 
   RoomSession? get session => _session;
@@ -26,6 +27,7 @@ class RoomState extends ChangeNotifier {
   bool get isUpdatingRaceStatus => _isUpdatingRaceStatus;
   bool get isAddingBetTarget => _isAddingBetTarget;
   bool get isSubmittingRaceResults => _isSubmittingRaceResults;
+  bool get isWakingServer => _isWakingServer;
 
   RoomMember? get currentUser {
     final session = _session;
@@ -42,8 +44,19 @@ class RoomState extends ChangeNotifier {
     return null;
   }
 
-  Future<void> prewarmServer() {
-    return _repository.prewarmServer();
+  Future<void> prewarmServer() async {
+    try {
+      await _repository.prewarmServer();
+      if (_isWakingServer) {
+        _isWakingServer = false;
+        notifyListeners();
+      }
+    } catch (_) {
+      if (!_isWakingServer) {
+        _isWakingServer = true;
+        notifyListeners();
+      }
+    }
   }
 
   Future<void> joinRoom(String userName) async {
@@ -167,9 +180,7 @@ class RoomState extends ChangeNotifier {
     }
   }
 
-  Future<void> addBetTarget({
-    required String targetName,
-  }) async {
+  Future<void> addBetTarget({required String targetName}) async {
     final session = _session;
     if (session == null) {
       return;

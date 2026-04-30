@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'data/room_repository.dart';
@@ -13,15 +15,19 @@ class BetHubApp extends StatefulWidget {
   State<BetHubApp> createState() => _BetHubAppState();
 }
 
-class _BetHubAppState extends State<BetHubApp> {
+class _BetHubAppState extends State<BetHubApp> with WidgetsBindingObserver {
   static const _defaultRoomServerUrl = 'ws://localhost:8080';
+  static const _prewarmInterval = Duration(minutes: 5);
 
   late final RoomState _roomState;
+  Timer? _prewarmTimer;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _roomState = RoomState(repository: _buildRepository());
+    _startPeriodicPrewarm();
   }
 
   RoomRepository _buildRepository() {
@@ -36,7 +42,40 @@ class _BetHubAppState extends State<BetHubApp> {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    switch (state) {
+      case AppLifecycleState.resumed:
+        _startPeriodicPrewarm(runImmediately: true);
+        break;
+      case AppLifecycleState.inactive:
+      case AppLifecycleState.hidden:
+      case AppLifecycleState.paused:
+      case AppLifecycleState.detached:
+        _stopPeriodicPrewarm();
+        break;
+    }
+  }
+
+  void _startPeriodicPrewarm({bool runImmediately = true}) {
+    if (runImmediately) {
+      unawaited(_roomState.prewarmServer());
+    }
+
+    _prewarmTimer?.cancel();
+    _prewarmTimer = Timer.periodic(_prewarmInterval, (_) {
+      unawaited(_roomState.prewarmServer());
+    });
+  }
+
+  void _stopPeriodicPrewarm() {
+    _prewarmTimer?.cancel();
+    _prewarmTimer = null;
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _stopPeriodicPrewarm();
     _roomState.dispose();
     super.dispose();
   }

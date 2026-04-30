@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:http/http.dart' as http;
 import 'package:web_socket_channel/web_socket_channel.dart';
@@ -22,7 +23,12 @@ class WebSocketRoomRepository implements RoomRepository {
   RoomSession? _session;
   String? _memberId;
   bool _isRoomMaster = false;
+  String? _joiningUserName;
+  String? _joinedUserName;
   Timer? _keepAliveTimer;
+  Timer? _reconnectTimer;
+  int _reconnectAttempts = 0;
+  bool _isDisposed = false;
   Completer<RoomSession>? _joinCompleter;
   Completer<RoomSession>? _submitBetCompleter;
   Completer<RoomSession>? _updateRaceStatusCompleter;
@@ -40,8 +46,6 @@ class WebSocketRoomRepository implements RoomRepository {
     _prewarmFuture = future;
     try {
       await future;
-    } catch (_) {
-      // Warm-up is best-effort only. Join flow handles real connection errors.
     } finally {
       _prewarmFuture = null;
     }
@@ -62,12 +66,14 @@ class WebSocketRoomRepository implements RoomRepository {
 
     final completer = Completer<RoomSession>();
     _joinCompleter = completer;
+    _joiningUserName = userName;
     _sendMessage('join_room', {'roomId': roomId, 'userName': userName});
 
     return completer.future.timeout(
       const Duration(seconds: 5),
       onTimeout: () {
         _joinCompleter = null;
+        _joiningUserName = null;
         throw const RoomJoinException('サーバーから入室結果を取得できませんでした。');
       },
     );
@@ -151,18 +157,17 @@ class WebSocketRoomRepository implements RoomRepository {
       _subscription = channel.stream.listen(
         _handleMessage,
         onError: (Object error) {
-          _handleStreamFailure(error);
+          _handleStreamClosed(error);
         },
         onDone: () {
-          _stopKeepAlive();
-          _channel = null;
+          _handleStreamClosed();
         },
       );
 
       await channel.ready.timeout(const Duration(seconds: 5));
       _startKeepAlive();
     } catch (error) {
-      _handleStreamFailure(error);
+      _handleStreamClosed(error);
       rethrow;
     }
   }
@@ -173,7 +178,10 @@ class WebSocketRoomRepository implements RoomRepository {
       return;
     }
 
-    await http.get(uri).timeout(const Duration(seconds: 20));
+    final response = await http.get(uri).timeout(const Duration(seconds: 20));
+    if (response.statusCode >= 400) {
+      throw StateError('Health check failed with status ${response.statusCode}.');
+    }
   }
 
   Uri? _buildHealthCheckUri() {
@@ -204,6 +212,10 @@ class WebSocketRoomRepository implements RoomRepository {
       case 'join_room_success':
         _memberId = payload['memberId'] as String?;
         _isRoomMaster = payload['isRoomMaster'] as bool? ?? false;
+        _joinedUserName = _joiningUserName;
+        _joiningUserName = null;
+        _cancelReconnect();
+        _reconnectAttempts = 0;
         break;
       case 'room_snapshot':
         final session = _parseSession(payload);
@@ -251,6 +263,7 @@ class WebSocketRoomRepository implements RoomRepository {
             payload['message'] as String? ?? 'Unknown server error.';
         final joinCompleter = _joinCompleter;
         if (joinCompleter != null && !joinCompleter.isCompleted) {
+          _joiningUserName = null;
           joinCompleter.completeError(RoomJoinException(message));
           _joinCompleter = null;
           return;
@@ -305,12 +318,20 @@ class WebSocketRoomRepository implements RoomRepository {
     return session.copyWith(members: nextMembers);
   }
 
-  void _handleStreamFailure(Object error) {
+  void _handleStreamClosed([Object? error]) {
+    if (_channel == null && _subscription == null) {
+      return;
+    }
+
     _stopKeepAlive();
+    _subscription = null;
     _channel = null;
     final joinCompleter = _joinCompleter;
     if (joinCompleter != null && !joinCompleter.isCompleted) {
-      joinCompleter.completeError(RoomJoinException('サーバー接続に失敗しました: $error'));
+      _joiningUserName = null;
+      joinCompleter.completeError(
+        RoomJoinException('サーバー接続に失敗しました: ${error ?? '接続が切断されました'}'),
+      );
       _joinCompleter = null;
     }
 
@@ -339,10 +360,12 @@ class WebSocketRoomRepository implements RoomRepository {
     if (submitRaceResultsCompleter != null &&
         !submitRaceResultsCompleter.isCompleted) {
       submitRaceResultsCompleter.completeError(
-        StateError('レース結果提出に失敗しました: $error'),
+        StateError('レース結果提出に失敗しました: ${error ?? '接続が切断されました'}'),
       );
       _submitRaceResultsCompleter = null;
     }
+
+    _scheduleReconnect();
   }
 
   void _sendMessage(String type, Map<String, dynamic> payload) {
@@ -368,13 +391,46 @@ class WebSocketRoomRepository implements RoomRepository {
         'type': 'ping',
         'payload': {'timestamp': DateTime.now().toUtc().toIso8601String()},
       });
-      channel.sink.add(message);
+      try {
+        channel.sink.add(message);
+      } catch (error) {
+        _handleStreamClosed(error);
+      }
     });
   }
 
   void _stopKeepAlive() {
     _keepAliveTimer?.cancel();
     _keepAliveTimer = null;
+  }
+
+  void _scheduleReconnect() {
+    final userName = _joinedUserName;
+    if (_isDisposed || userName == null || _reconnectTimer != null) {
+      return;
+    }
+
+    final delaySeconds = min(30, 2 << _reconnectAttempts);
+    _reconnectTimer = Timer(Duration(seconds: delaySeconds), () async {
+      _reconnectTimer = null;
+      if (_isDisposed || _channel != null) {
+        return;
+      }
+
+      try {
+        await prewarmServer();
+        await joinRoom(userName: userName);
+        _reconnectAttempts = 0;
+      } catch (_) {
+        _reconnectAttempts += 1;
+        _scheduleReconnect();
+      }
+    });
+  }
+
+  void _cancelReconnect() {
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
   }
 
   @override
@@ -450,7 +506,9 @@ class WebSocketRoomRepository implements RoomRepository {
 
   @override
   Future<void> dispose() async {
+    _isDisposed = true;
     _stopKeepAlive();
+    _cancelReconnect();
     await _subscription?.cancel();
     final channel = _channel;
     if (channel != null) {
