@@ -238,6 +238,12 @@ class _RoomMasterPageState extends State<RoomMasterPage> {
                       Expanded(
                         child: TextField(
                           controller: _targetNameController,
+                          textInputAction: TextInputAction.done,
+                          onSubmitted: (_) {
+                            if (!roomState.isAddingBetTarget) {
+                              _addBetTarget();
+                            }
+                          },
                           decoration: const InputDecoration(
                             labelText: 'ベット対象名',
                             border: OutlineInputBorder(),

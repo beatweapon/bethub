@@ -194,6 +194,7 @@ class BetAmountInput extends StatelessWidget {
     return TextField(
       controller: controller,
       focusNode: focusNode,
+      textInputAction: TextInputAction.done,
       keyboardType: TextInputType.number,
       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
       enabled: enabled,

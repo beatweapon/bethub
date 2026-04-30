@@ -107,6 +107,8 @@ class _EntryPageState extends State<EntryPage> {
                         const SizedBox(height: 24),
                         TextFormField(
                           controller: _nameController,
+                          textInputAction: TextInputAction.done,
+                          onFieldSubmitted: (_) => _handleJoin(),
                           decoration: const InputDecoration(
                             labelText: 'ユーザー名',
                             border: OutlineInputBorder(),
