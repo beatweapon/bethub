@@ -19,6 +19,7 @@ class BetPage extends StatefulWidget {
 class _BetPageState extends State<BetPage> {
   final Map<String, TextEditingController> _controllers = {};
   final Map<String, FocusNode> _focusNodes = {};
+  final Set<String> _committingTargetIds = <String>{};
   RoomSession? _previousSession;
   bool _isShowingPayoutDialog = false;
 
@@ -105,6 +106,10 @@ class _BetPageState extends State<BetPage> {
   }
 
   Future<void> _commitBet(String targetId) async {
+    if (_committingTargetIds.contains(targetId)) {
+      return;
+    }
+
     final roomState = RoomScope.of(context);
     final session = roomState.session;
     if (session == null) {
@@ -128,18 +133,23 @@ class _BetPageState extends State<BetPage> {
       return;
     }
 
-    final requestedAmount = int.tryParse(controller.text) ?? 0;
-    final acceptedAmount = await roomState.submitBet(
-      targetId: target.id,
-      requestedAmount: requestedAmount,
-    );
-
-    final nextText = _displayText(acceptedAmount);
-    if (controller.text != nextText) {
-      controller.value = TextEditingValue(
-        text: nextText,
-        selection: TextSelection.collapsed(offset: nextText.length),
+    _committingTargetIds.add(targetId);
+    try {
+      final requestedAmount = int.tryParse(controller.text) ?? 0;
+      final acceptedAmount = await roomState.submitBet(
+        targetId: target.id,
+        requestedAmount: requestedAmount,
       );
+
+      final nextText = _displayText(acceptedAmount);
+      if (controller.text != nextText) {
+        controller.value = TextEditingValue(
+          text: nextText,
+          selection: TextSelection.collapsed(offset: nextText.length),
+        );
+      }
+    } finally {
+      _committingTargetIds.remove(targetId);
     }
   }
 
@@ -213,7 +223,7 @@ class _BetPageState extends State<BetPage> {
               Text('賭け対象一覧', style: Theme.of(context).textTheme.headlineSmall),
               const SizedBox(height: 8),
               Text(
-                '入力値はフォーカスが外れたときに確定します。各対象のカード内で、その対象に誰がいくら賭けているかを確認できます。',
+                '入力値は Enter キーまたはフォーカスが外れたときに確定します。各対象のカード内で、その対象に誰がいくら賭けているかを確認できます。',
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
               const SizedBox(height: 16),
