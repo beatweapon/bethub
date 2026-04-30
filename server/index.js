@@ -6,6 +6,7 @@ const PORT = Number(process.env.PORT ?? 8080);
 const DEFAULT_ROOM_ID = 'main-room';
 const ENABLE_MOCK_DATA =
   process.argv.includes('--mock') || process.env.ENABLE_MOCK_DATA === 'true';
+const HEARTBEAT_INTERVAL_MS = 30_000;
 
 // オッズ計算のパラメータ
 const ODDS_CALCULATION_PARAMS = {
@@ -52,6 +53,11 @@ const wss = new WebSocketServer({ server });
 wss.on('connection', (socket) => {
   const connectionId = randomUUID();
   connections.set(socket, { connectionId, memberId: null, roomId: null });
+  socket.isAlive = true;
+
+  socket.on('pong', () => {
+    socket.isAlive = true;
+  });
 
   socket.on('message', (rawMessage) => {
     try {
@@ -66,6 +72,26 @@ wss.on('connection', (socket) => {
     removeMember(socket);
     connections.delete(socket);
   });
+});
+
+const heartbeatInterval = setInterval(() => {
+  for (const socket of wss.clients) {
+    if (socket.readyState !== WebSocket.OPEN) {
+      continue;
+    }
+
+    if (!socket.isAlive) {
+      socket.terminate();
+      continue;
+    }
+
+    socket.isAlive = false;
+    socket.ping();
+  }
+}, HEARTBEAT_INTERVAL_MS);
+
+wss.on('close', () => {
+  clearInterval(heartbeatInterval);
 });
 
 server.listen(PORT, () => {
