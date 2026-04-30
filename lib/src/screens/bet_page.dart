@@ -1,13 +1,12 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-
 import '../models/bet_target.dart';
 import '../models/room_member.dart';
 import '../models/room_session.dart';
 import '../state/room_scope.dart';
 import '../state/room_state.dart';
+import '../widgets/bet_target_card.dart';
 import 'room_page.dart';
 
 class BetPage extends StatefulWidget {
@@ -224,13 +223,8 @@ class _BetPageState extends State<BetPage> {
                   separatorBuilder: (_, _) => const SizedBox(height: 12),
                   itemBuilder: (context, index) {
                     final target = session.betTargets[index];
-                    return _BetTargetCard(
+                    return BetTargetCard(
                       target: target,
-                      controller: _controllers[target.id]!,
-                      focusNode: _focusNodes[target.id]!,
-                      isSubmitting: roomState.isSubmittingBet,
-                      isRacing: session.raceStatus.isRacing,
-                      onSubmitted: () => _commitBet(target.id),
                       isHighestWinRate:
                           (target.winRate - maxWinRate).abs() < 0.0001,
                       isHighestAverageRank:
@@ -243,6 +237,14 @@ class _BetPageState extends State<BetPage> {
                         roomState: roomState,
                         members: session.members,
                         target: target,
+                      ),
+                      betInput: BetAmountInput(
+                        controller: _controllers[target.id]!,
+                        focusNode: _focusNodes[target.id]!,
+                        enabled:
+                            !roomState.isSubmittingBet &&
+                            !session.raceStatus.isRacing,
+                        onSubmitted: () => _commitBet(target.id),
                       ),
                     );
                   },
@@ -266,12 +268,12 @@ class _BetPageState extends State<BetPage> {
     );
   }
 
-  List<_PlayerTargetBetStatus> _playerStatusesForTarget({
+  List<PlayerTargetBetStatus> _playerStatusesForTarget({
     required RoomState roomState,
     required List<RoomMember> members,
     required BetTarget target,
   }) {
-    final statuses = <_PlayerTargetBetStatus>[];
+    final statuses = <PlayerTargetBetStatus>[];
 
     for (final member in members) {
       final amount = roomState.betAmountFor(
@@ -282,7 +284,7 @@ class _BetPageState extends State<BetPage> {
         continue;
       }
       statuses.add(
-        _PlayerTargetBetStatus(
+        PlayerTargetBetStatus(
           memberName: member.name,
           amount: amount,
           isCurrentUser: member.isCurrentUser,
@@ -525,227 +527,3 @@ class _PayoutResultDialog extends StatelessWidget {
   }
 }
 
-class _BetTargetCard extends StatefulWidget {
-  const _BetTargetCard({
-    required this.target,
-    required this.controller,
-    required this.focusNode,
-    required this.isSubmitting,
-    required this.isRacing,
-    required this.onSubmitted,
-    required this.isHighestWinRate,
-    required this.isHighestAverageRank,
-    required this.isHighestOdds,
-    required this.isLowestOdds,
-    required this.playerBetStatuses,
-  });
-
-  final BetTarget target;
-  final TextEditingController controller;
-  final FocusNode focusNode;
-  final bool isSubmitting;
-  final bool isRacing;
-  final VoidCallback onSubmitted;
-  final bool isHighestWinRate;
-  final bool isHighestAverageRank;
-  final bool isHighestOdds;
-  final bool isLowestOdds;
-  final List<_PlayerTargetBetStatus> playerBetStatuses;
-
-  @override
-  State<_BetTargetCard> createState() => _BetTargetCardState();
-}
-
-class _BetTargetCardState extends State<_BetTargetCard> {
-  @override
-  Widget build(BuildContext context) {
-    final target = widget.target;
-    final winRatePercent = (target.winRate * 100).toStringAsFixed(0);
-    final averageRankText = target.averageRank == null
-        ? '-'
-        : target.averageRank!.toStringAsFixed(1);
-    final oddsValueColor = widget.isHighestOdds && widget.isLowestOdds
-        ? null
-        : widget.isHighestOdds
-        ? Theme.of(context).colorScheme.error
-        : widget.isLowestOdds
-        ? Theme.of(context).colorScheme.primary
-        : null;
-
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  flex: 3,
-                  child: Text(
-                    target.name,
-                    style: Theme.of(context).textTheme.titleMedium,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  flex: 2,
-                  child: _MetricColumn(
-                    label: '勝率',
-                    value: '$winRatePercent%',
-                    showCrown: widget.isHighestWinRate,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  flex: 2,
-                  child: _MetricColumn(
-                    label: '平均順位',
-                    value: averageRankText,
-                    showCrown: widget.isHighestAverageRank,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  flex: 2,
-                  child: _MetricColumn(
-                    label: 'オッズ',
-                    value: '${target.odds.toStringAsFixed(1)}倍',
-                    valueColor: oddsValueColor,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                SizedBox(
-                  width: 120,
-                  child: TextField(
-                    controller: widget.controller,
-                    focusNode: widget.focusNode,
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                    enabled: !widget.isSubmitting && !widget.isRacing,
-                    onSubmitted: (_) => widget.onSubmitted(),
-                    decoration: const InputDecoration(
-                      labelText: '賭けるコイン',
-                      hintText: '100',
-                      suffixText: '枚',
-                      border: OutlineInputBorder(),
-                      isDense: true,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            if (widget.playerBetStatuses.isEmpty)
-              Text(
-                'まだ誰もベットしていません',
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-            if (widget.playerBetStatuses.isNotEmpty)
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final status in widget.playerBetStatuses)
-                    _TargetPlayerBetChip(status: status),
-                ],
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _TargetPlayerBetChip extends StatelessWidget {
-  const _TargetPlayerBetChip({required this.status});
-
-  final _PlayerTargetBetStatus status;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            status.memberName,
-            style: Theme.of(context).textTheme.bodyMedium,
-          ),
-          if (status.isCurrentUser) ...[
-            const SizedBox(width: 6),
-            Text('あなた', style: Theme.of(context).textTheme.labelSmall),
-          ],
-          const SizedBox(width: 8),
-          Text(
-            '${status.amount}枚',
-            style: Theme.of(
-              context,
-            ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _MetricColumn extends StatelessWidget {
-  const _MetricColumn({
-    required this.label,
-    required this.value,
-    this.showCrown = false,
-    this.valueColor,
-  });
-
-  final String label;
-  final String value;
-  final bool showCrown;
-  final Color? valueColor;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(width: 4),
-            Flexible(
-              child: Text(label, style: Theme.of(context).textTheme.bodySmall),
-            ),
-            if (showCrown) ...[const SizedBox(width: 2), const Text('👑')],
-          ],
-        ),
-        const SizedBox(height: 2),
-        Text(
-          value,
-          style: Theme.of(
-            context,
-          ).textTheme.bodyMedium?.copyWith(color: valueColor),
-        ),
-      ],
-    );
-  }
-}
-
-class _PlayerTargetBetStatus {
-  const _PlayerTargetBetStatus({
-    required this.memberName,
-    required this.amount,
-    required this.isCurrentUser,
-  });
-
-  final String memberName;
-  final int amount;
-  final bool isCurrentUser;
-}

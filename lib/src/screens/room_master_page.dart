@@ -1,9 +1,14 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../models/race_status.dart';
+import '../models/room_member.dart';
 import '../models/room_session.dart';
 import '../state/room_scope.dart';
+import '../state/room_state.dart';
+import '../widgets/bet_target_card.dart';
 
 class RoomMasterPage extends StatefulWidget {
   const RoomMasterPage({super.key});
@@ -126,70 +131,137 @@ class _RoomMasterPageState extends State<RoomMasterPage> {
     }
 
     final isRacing = session.raceStatus == RaceStatus.racing;
+    final sortedMembers = [...session.members]
+      ..sort((a, b) {
+        final coinComparison = b.coins.compareTo(a.coins);
+        if (coinComparison != 0) {
+          return coinComparison;
+        }
+        return a.name.compareTo(b.name);
+      });
+    final betTargets = session.betTargets;
+    final maxWinRate = betTargets.isEmpty
+        ? 0.0
+        : betTargets.map((target) => target.winRate).reduce(math.max);
+    final averageRanks = betTargets
+        .map((target) => target.averageRank)
+        .whereType<double>()
+        .toList();
+    final minAverageRank = averageRanks.isEmpty
+        ? null
+        : averageRanks.reduce(math.min);
+    final maxOdds = betTargets.isEmpty
+        ? 0.0
+        : betTargets.map((target) => target.odds).reduce(math.max);
+    final minOdds = betTargets.isEmpty
+        ? 0.0
+        : betTargets.map((target) => target.odds).reduce(math.min);
 
     return Scaffold(
       appBar: AppBar(title: const Text('ルームマスター管理画面')),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Room info card
-            Card(
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
+            Text('参加者', style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 8),
+            if (sortedMembers.isEmpty)
+              const Text('まだ参加者はいません')
+            else
+              ..._buildMemberSummaryCards(
+                members: sortedMembers,
+                roomState: roomState,
               ),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      session.roomName,
-                      style: Theme.of(context).textTheme.headlineSmall,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'ステータス: ${isRacing ? 'レース中' : 'ベット受付中'}',
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                  ],
-                ),
+            const SizedBox(height: 16),
+            if (isRacing) ...[
+              Text('現在のベット状況', style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: 8),
+              ..._buildBetTargetOverviewCards(
+                session: session,
+                maxWinRate: maxWinRate,
+                minAverageRank: minAverageRank,
+                maxOdds: maxOdds,
+                minOdds: minOdds,
               ),
-            ),
-            const SizedBox(height: 24),
-            if (!isRacing) ...[
-              // Bet target registration section
-              Text('ベット対象管理', style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: 16),
+              // Race results section
+              Text('レース結果入力', style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: 8),
+              Text(
+                'ベット対象の最終順位を入力してください',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
               const SizedBox(height: 12),
+              ..._buildRankingInputs(session),
+              const SizedBox(height: 16),
+              FilledButton(
+                onPressed: roomState.isSubmittingRaceResults
+                    ? null
+                    : _submitResults,
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+                child: roomState.isSubmittingRaceResults
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('結果を提出'),
+              ),
+            ],
+            if (!isRacing) ...[
+              Text('現在のベット状況', style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: 8),
+              if (session.betTargets.isEmpty)
+                const Text('ベット対象を追加するとここに一覧が表示されます')
+              else
+                ..._buildBetTargetOverviewCards(
+                  session: session,
+                  maxWinRate: maxWinRate,
+                  minAverageRank: minAverageRank,
+                  maxOdds: maxOdds,
+                  minOdds: minOdds,
+                ),
+              const SizedBox(height: 16),
               Card(
                 elevation: 0,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                  padding: const EdgeInsets.all(12),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      TextField(
-                        controller: _targetNameController,
-                        decoration: const InputDecoration(
-                          labelText: 'ベット対象名',
-                          border: OutlineInputBorder(),
+                      Expanded(
+                        child: TextField(
+                          controller: _targetNameController,
+                          decoration: const InputDecoration(
+                            labelText: 'ベット対象名',
+                            border: OutlineInputBorder(),
+                          ),
+                          enabled: !roomState.isAddingBetTarget,
                         ),
-                        enabled: !roomState.isAddingBetTarget,
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(width: 8),
                       FilledButton(
                         onPressed: roomState.isAddingBetTarget
                             ? null
                             : _addBetTarget,
+                        style: FilledButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 10,
+                          ),
+                          minimumSize: const Size(0, 0),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
                         child: roomState.isAddingBetTarget
                             ? const SizedBox(
-                                width: 20,
-                                height: 20,
+                                width: 18,
+                                height: 18,
                                 child: CircularProgressIndicator(
                                   strokeWidth: 2,
                                 ),
@@ -201,84 +273,143 @@ class _RoomMasterPageState extends State<RoomMasterPage> {
                 ),
               ),
               const SizedBox(height: 16),
-              // Current bet targets
-              if (session.betTargets.isNotEmpty) ...[
-                Text(
-                  '登録済みベット対象',
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-                const SizedBox(height: 8),
-                ...session.betTargets.map(
-                  (target) => Card(
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(target.name),
-                                Text(
-                                  'オッズ: ${target.odds}',
-                                  style: Theme.of(context).textTheme.bodySmall,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-              ],
-              // Race control buttons
               FilledButton.tonal(
                 onPressed: roomState.isUpdatingRaceStatus ? null : _startRace,
                 style: FilledButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
                 ),
                 child: Text(
                   roomState.isUpdatingRaceStatus ? '処理中...' : 'レースを開始',
                 ),
-              ),
-            ] else ...[
-              // Race results section
-              Text('レース結果入力', style: Theme.of(context).textTheme.titleLarge),
-              const SizedBox(height: 12),
-              Text(
-                'ベット対象の最終順位を入力してください',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-              const SizedBox(height: 16),
-              ..._buildRankingInputs(session),
-              const SizedBox(height: 24),
-              FilledButton(
-                onPressed: roomState.isSubmittingRaceResults
-                    ? null
-                    : _submitResults,
-                style: FilledButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                ),
-                child: roomState.isSubmittingRaceResults
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Text('結果を提出'),
               ),
             ],
           ],
         ),
       ),
     );
+  }
+
+  List<Widget> _buildMemberSummaryCards({
+    required List<RoomMember> members,
+    required RoomState roomState,
+  }) {
+    final widgets = <Widget>[];
+
+    for (int i = 0; i < members.length; i++) {
+      final member = members[i];
+      final totalBetCoins = roomState.totalBetCoinsFor(member.id);
+      widgets.add(
+        Card(
+          elevation: 0,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: ListTile(
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 6,
+            ),
+            leading: CircleAvatar(child: Text(member.name.characters.first)),
+            title: Text(member.name),
+            subtitle: Text('現在のベット: $totalBetCoins枚'),
+            trailing: Text('${member.coins}枚'),
+          ),
+        ),
+      );
+      if (i < members.length - 1) {
+        widgets.add(const SizedBox(height: 6));
+      }
+    }
+
+    return widgets;
+  }
+
+  List<Widget> _buildBetTargetOverviewCards({
+    required RoomSession session,
+    required double maxWinRate,
+    required double? minAverageRank,
+    required double maxOdds,
+    required double minOdds,
+  }) {
+    final widgets = <Widget>[];
+
+    for (int i = 0; i < session.betTargets.length; i++) {
+      final target = session.betTargets[i];
+      widgets.add(
+        BetTargetCard(
+          target: target,
+          isHighestWinRate: (target.winRate - maxWinRate).abs() < 0.0001,
+          isHighestAverageRank:
+              minAverageRank != null &&
+              target.averageRank != null &&
+              (target.averageRank! - minAverageRank).abs() < 0.0001,
+          isHighestOdds: (target.odds - maxOdds).abs() < 0.0001,
+          isLowestOdds: (target.odds - minOdds).abs() < 0.0001,
+          totalCoins: _totalBetCoinsForTarget(session: session, targetId: target.id),
+          playerBetStatuses: _playerStatusesForTarget(
+            members: session.members,
+            session: session,
+            targetId: target.id,
+          ),
+        ),
+      );
+      if (i < session.betTargets.length - 1) {
+        widgets.add(const SizedBox(height: 8));
+      }
+    }
+
+    return widgets;
+  }
+
+  List<PlayerTargetBetStatus> _playerStatusesForTarget({
+    required List<RoomMember> members,
+    required RoomSession session,
+    required String targetId,
+  }) {
+    final statuses = <PlayerTargetBetStatus>[];
+
+    for (final member in members) {
+      var amount = 0;
+      for (final bet in session.bets) {
+        if (bet.memberId == member.id && bet.targetId == targetId) {
+          amount = bet.amount;
+          break;
+        }
+      }
+
+      if (amount <= 0) {
+        continue;
+      }
+
+      statuses.add(
+        PlayerTargetBetStatus(
+          memberName: member.name,
+          amount: amount,
+          isCurrentUser: member.isCurrentUser,
+        ),
+      );
+    }
+
+    statuses.sort((a, b) {
+      final amountComparison = b.amount.compareTo(a.amount);
+      if (amountComparison != 0) {
+        return amountComparison;
+      }
+      return a.memberName.compareTo(b.memberName);
+    });
+
+    return statuses;
+  }
+
+  int _totalBetCoinsForTarget({
+    required RoomSession session,
+    required String targetId,
+  }) {
+    var total = 0;
+    for (final bet in session.bets) {
+      if (bet.targetId == targetId) {
+        total += bet.amount;
+      }
+    }
+    return total;
   }
 
   List<Widget> _buildRankingInputs(RoomSession session) {
@@ -294,7 +425,7 @@ class _RoomMasterPageState extends State<RoomMasterPage> {
             borderRadius: BorderRadius.circular(12),
           ),
           child: Padding(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(10),
             child: Row(
               children: [
                 Expanded(child: Text(target.name)),
@@ -306,7 +437,7 @@ class _RoomMasterPageState extends State<RoomMasterPage> {
                       border: OutlineInputBorder(),
                       contentPadding: EdgeInsets.symmetric(
                         horizontal: 8,
-                        vertical: 8,
+                        vertical: 6,
                       ),
                     ),
                     keyboardType: TextInputType.number,
@@ -325,7 +456,7 @@ class _RoomMasterPageState extends State<RoomMasterPage> {
         ),
       );
       if (i < targets.length - 1) {
-        widgets.add(const SizedBox(height: 8));
+        widgets.add(const SizedBox(height: 6));
       }
     }
 
