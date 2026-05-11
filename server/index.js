@@ -10,8 +10,8 @@ const HEARTBEAT_INTERVAL_MS = 30_000;
 
 // オッズ計算のパラメータ
 const ODDS_CALCULATION_PARAMS = {
-  alpha: 0.5, // 人気の影響度
-  beta: 0.5, // 実力の影響度
+  alpha: 1, // 人気の影響度
+  beta: 1, // 実力の影響度
   k: 2, // 順位計算の指数
 };
 
