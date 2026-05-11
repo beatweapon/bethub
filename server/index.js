@@ -439,8 +439,9 @@ function calculateWinRates(betTargets) {
   );
 }
 
-// オッズを計算: odds_i = Σ bet_j / effective_weight_i
-// effective_weight_i = (bet_i^α) * (p_i^β)
+// オッズを計算:
+// 人気(賭け比率)と実力(勝率)を合成した相対スコアから逆数を取り、
+// 全体の賭け枚数に引きずられず、配分バランスでオッズが決まるようにする。
 function calculateOdds(betTargets, bets) {
   const { alpha, beta } = ODDS_CALCULATION_PARAMS;
   const winRates = calculateWinRates(betTargets);
@@ -452,14 +453,26 @@ function calculateOdds(betTargets, bets) {
     betsByTarget.set(bet.targetId, current + bet.amount);
   });
 
-  const totalBets = bets.reduce((sum, bet) => sum + bet.amount, 0) || 1;
+  const totalBets = bets.reduce((sum, bet) => sum + bet.amount, 0);
+  const basePopularity = 1 / Math.max(1, betTargets.length);
 
-  return betTargets.map((target, index) => {
-    const bet_i = betsByTarget.get(target.id) || 1;
-    const p_i = winRates[index];
-    const effectiveWeight =
-      Math.pow(bet_i, alpha) * Math.pow(Math.max(0.01, p_i), beta);
-    return effectiveWeight > 0 ? totalBets / effectiveWeight : 0;
+  const scores = betTargets.map((target, index) => {
+    const targetBet = betsByTarget.get(target.id) || 0;
+    const popularity =
+      totalBets > 0 ? targetBet / totalBets : basePopularity;
+    const p_i = Math.max(0.01, winRates[index] || 0);
+
+    return Math.pow(Math.max(0.01, popularity), alpha) * Math.pow(p_i, beta);
+  });
+
+  const totalScore = scores.reduce((sum, score) => sum + score, 0);
+  if (totalScore <= 0) {
+    return betTargets.map(() => 1);
+  }
+
+  return scores.map((score) => {
+    const impliedProbability = score / totalScore;
+    return impliedProbability > 0 ? 1 / impliedProbability : 1;
   });
 }
 
