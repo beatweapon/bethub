@@ -7,6 +7,7 @@ import '../models/room_session.dart';
 import '../state/room_scope.dart';
 import '../state/room_state.dart';
 import '../widgets/bet_target_card.dart';
+import '../widgets/payout_result_dialog.dart';
 import 'room_page.dart';
 
 class BetPage extends StatefulWidget {
@@ -362,7 +363,7 @@ class _BetPageState extends State<BetPage> {
       await showDialog<void>(
         context: context,
         barrierDismissible: true,
-        builder: (dialogContext) => _PayoutResultDialog(
+        builder: (dialogContext) => PayoutResultDialog(
           isWin: coinDelta > 0,
           previousCoins: previousCoins,
           nextCoins: nextCoins,
@@ -421,119 +422,8 @@ class _AnimatedCoinCounterState extends State<_AnimatedCoinCounter> {
       duration: const Duration(milliseconds: 850),
       curve: Curves.easeOutCubic,
       builder: (context, animatedValue, _) {
-        return Text(
-          '${animatedValue.round()}枚',
-          style: widget.style,
-        );
+        return Text('${animatedValue.round()}枚', style: widget.style);
       },
     );
   }
 }
-
-class _PayoutResultDialog extends StatelessWidget {
-  const _PayoutResultDialog({
-    required this.isWin,
-    required this.previousCoins,
-    required this.nextCoins,
-    required this.gainedCoins,
-  });
-
-  final bool isWin;
-  final int previousCoins;
-  final int nextCoins;
-  final int gainedCoins;
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final headline = isWin ? 'JACKPOT!' : 'ざんねん...';
-    final message = isWin
-        ? '予想的中！コイン獲得！'
-        : '今回は当たりなし。次のレースで巻き返そう。';
-    final surfaceColor = isWin
-        ? colorScheme.primaryContainer
-        : colorScheme.surfaceContainerHighest;
-
-    return Dialog(
-      insetPadding: const EdgeInsets.symmetric(horizontal: 20),
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(24),
-          gradient: isWin
-              ? const LinearGradient(
-                  colors: [Color(0xFFFFF59D), Color(0xFFFFCC80)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                )
-              : const LinearGradient(
-                  colors: [Color(0xFFE0E0E0), Color(0xFFBDBDBD)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(headline, style: Theme.of(context).textTheme.headlineSmall),
-              const SizedBox(height: 8),
-              Text(message, style: Theme.of(context).textTheme.bodyLarge),
-              const SizedBox(height: 16),
-              if (isWin)
-                Wrap(
-                  alignment: WrapAlignment.center,
-                  spacing: 12,
-                  children: const [Text('🪙'), Text('✨'), Text('🪙'), Text('🎉')],
-                )
-              else
-                const Text('💨'),
-              const SizedBox(height: 16),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: surfaceColor.withValues(alpha: 0.85),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Column(
-                  children: [
-                    Text(
-                      isWin ? '+$gainedCoins枚' : '+0枚',
-                      style: Theme.of(context).textTheme.headlineMedium
-                          ?.copyWith(fontWeight: FontWeight.w800),
-                    ),
-                    const SizedBox(height: 8),
-                    TweenAnimationBuilder<double>(
-                      tween: Tween<double>(
-                        begin: previousCoins.toDouble(),
-                        end: nextCoins.toDouble(),
-                      ),
-                      duration: const Duration(milliseconds: 1300),
-                      curve: Curves.easeOutCubic,
-                      builder: (context, animatedValue, _) {
-                        return Text(
-                          '所持コイン ${animatedValue.round()}枚',
-                          style: Theme.of(context).textTheme.titleLarge,
-                        );
-                      },
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('閉じる'),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
